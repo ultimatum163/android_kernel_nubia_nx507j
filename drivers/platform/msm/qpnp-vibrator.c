@@ -53,6 +53,7 @@ struct qpnp_vib {
 };
 
 static struct qpnp_vib *vib_dev;
+
 static ssize_t qpnp_vib_min_show(struct device *dev,
                                         struct device_attribute *attr,
                                         char *buf)
@@ -60,8 +61,10 @@ static ssize_t qpnp_vib_min_show(struct device *dev,
         struct timed_output_dev *tdev = dev_get_drvdata(dev);
         struct qpnp_vib *vib = container_of(tdev, struct qpnp_vib,
                                          timed_dev);
+
         return scnprintf(buf, PAGE_SIZE, "%d\n", vib->vtg_min);
 }
+
 static ssize_t qpnp_vib_max_show(struct device *dev,
                                         struct device_attribute *attr,
                                         char *buf)
@@ -69,6 +72,7 @@ static ssize_t qpnp_vib_max_show(struct device *dev,
         struct timed_output_dev *tdev = dev_get_drvdata(dev);
         struct qpnp_vib *vib = container_of(tdev, struct qpnp_vib,
                                          timed_dev);
+
         return scnprintf(buf, PAGE_SIZE, "%d\n", vib->vtg_max);
 }
 
@@ -82,6 +86,7 @@ static ssize_t qpnp_vib_level_show(struct device *dev,
 
         return scnprintf(buf, PAGE_SIZE, "%d\n", vib->vtg_level);
 }
+
 
 static ssize_t qpnp_vib_level_store(struct device *dev,
                                         struct device_attribute *attr,
@@ -275,8 +280,10 @@ static enum hrtimer_restart qpnp_vib_timer_func(struct hrtimer *timer)
 	unsigned long flags;
 
 	spin_lock_irqsave(&vib->lock, flags);
+
 	vib->state = 0;
 	qpnp_vib_set(vib, vib->state);
+
 	spin_unlock_irqrestore(&vib->lock, flags);
 
 	return HRTIMER_NORESTART;
@@ -341,6 +348,7 @@ static int __devinit qpnp_vibrator_probe(struct spmi_device *spmi)
 		dev_err(&spmi->dev, "Unable to read vtg max level\n");
 		return rc;
 	}
+
 	vib->vtg_min = QPNP_VIB_DEFAULT_VTG_MIN;
 	rc = of_property_read_u32(spmi->dev.of_node,
 			"qcom,vib-vtg-min-mV", &temp_val);
@@ -350,6 +358,7 @@ static int __devinit qpnp_vibrator_probe(struct spmi_device *spmi)
 		dev_err(&spmi->dev, "Unable to read vtg min level\n");
 		return rc;
 	}
+
 	vib->vtg_level /= 100;
 	vib->vtg_min /= 100;
 	vib->vtg_max /= 100;
@@ -388,7 +397,7 @@ static int __devinit qpnp_vibrator_probe(struct spmi_device *spmi)
 	if (rc < 0)
 		return rc;
 
-	device_create_file(vib->timed_dev.dev, &dev_attr_vtg_level);
+		device_create_file(vib->timed_dev.dev, &dev_attr_vtg_level);
 		device_create_file(vib->timed_dev.dev, &dev_attr_vtg_min);
 		device_create_file(vib->timed_dev.dev, &dev_attr_vtg_max);
 

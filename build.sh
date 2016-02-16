@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export ARCH=arm
-export CROSS_COMPILE="/home/ultimatum163/nx507j_dev/NX505J_kernel/toolchain-linaro/bin/arm-cortex_a15-linux-gnueabihf-"
+export CROSS_COMPILE=""
 
 
 make nx507j_defconfig

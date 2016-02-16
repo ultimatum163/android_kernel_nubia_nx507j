@@ -744,7 +744,6 @@ static void goodix_ts_work_func(struct work_struct *work)
         GTP_DEBUG("0x814B = 0x%02X", doze_buf[2]);
         if (ret > 0)
         {
-#if 0
             if ((doze_buf[2] == 'a') || (doze_buf[2] == 'b') || (doze_buf[2] == 'c') ||
                 (doze_buf[2] == 'd') || (doze_buf[2] == 'e') || (doze_buf[2] == 'g') || 
                 (doze_buf[2] == 'h') || (doze_buf[2] == 'm') || (doze_buf[2] == 'o') ||
@@ -761,10 +760,10 @@ static void goodix_ts_work_func(struct work_struct *work)
                 {
                     GTP_INFO("Wakeup by gesture(^), light up the screen!");
                 }
-                doze_status = DOZE_WAKEUP;
-                input_report_key(ts->input_dev, KEY_POWER, 1);
+//                doze_status = DOZE_WAKEUP;
+                input_report_key(ts->input_dev, KEY_F10, 1);
                 input_sync(ts->input_dev);
-                input_report_key(ts->input_dev, KEY_POWER, 0);
+                input_report_key(ts->input_dev, KEY_F10, 0);
                 input_sync(ts->input_dev);
                 // clear 0x814B
                 doze_buf[2] = 0x00;
@@ -777,28 +776,22 @@ static void goodix_ts_work_func(struct work_struct *work)
                 u8 type = ((doze_buf[2] & 0x0F) - 0x0A) + (((doze_buf[2] >> 4) & 0x0F) - 0x0A) * 2;
                 
                 GTP_INFO("%s slide to light up the screen!", direction[type]);
-                doze_status = DOZE_WAKEUP;
-                input_report_key(ts->input_dev, KEY_POWER, 1);
+//                doze_status = DOZE_WAKEUP;
+                input_report_key(ts->input_dev, KEY_F10, 1);
                 input_sync(ts->input_dev);
-                input_report_key(ts->input_dev, KEY_POWER, 0);
+                input_report_key(ts->input_dev, KEY_F10, 0);
                 input_sync(ts->input_dev);
                 // clear 0x814B
                 doze_buf[2] = 0x00;
                 gtp_i2c_write(i2c_connect_client, doze_buf, 3);
             }
-#endif
 
-			if (0xCC == doze_buf[2]) {
+            else if (0xCC == doze_buf[2])
+            {
                 GTP_INFO("Double click to light up the screen!");
 				
-				gtp_i2c_read(i2c_connect_client, gesture_data, 6);
 				
-				if (((gesture_data[2] == 1) || (gesture_data[2] == 2) || (gesture_data[2] == 4)) &&
-					((gesture_data[3] == 0) && (gesture_data[4] == 0) && (gesture_data[5] == 0))) {
-					GTP_INFO("Double click by key report ignore light up the screen!");
-				} else {
-					GTP_INFO("Double click AA area to light up the screen!");
-					doze_status = DOZE_WAKEUP;
+//                doze_status = DOZE_WAKEUP;
 #if 1			//add by luochangyang 2014/04/30
 					input_report_key(ts->input_dev, KEY_F10, 1);
 					input_sync(ts->input_dev);
@@ -808,16 +801,21 @@ static void goodix_ts_work_func(struct work_struct *work)
 #else
 					input_report_key(ts->input_dev, KEY_POWER, 1);
 					input_sync(ts->input_dev);
+	msleep(DT2W_PWRKEY_DUR);
 					input_report_key(ts->input_dev, KEY_POWER, 0);
 					input_sync(ts->input_dev);
 #endif
+                doze_buf[2] = 0x00;
+                gtp_i2c_write(i2c_connect_client, doze_buf, 3);
+				gtp_enter_doze(ts);
 				}
-            }
-
+            else
+            {
 			// clear 0x814B
 			doze_buf[2] = 0x00;
 			gtp_i2c_write(i2c_connect_client, doze_buf, 3);
 			gtp_enter_doze(ts);
+            }
         }
         if (ts->use_irq)
         {
