@@ -84,7 +84,7 @@ u8 config[GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH]
     #define GTP_MAX_KEY_NUM  (sizeof(touch_key_array)/sizeof(touch_key_array[0]))
     
 #if GTP_DEBUG_ON
-    static const int  key_codes[] = {KEY_MENU, KEY_HOME, KEY_BACK};
+    static const int  key_codes[] = {KEY_MENU, KEY_HOMEPAGE, KEY_BACK};
     static const char *key_names[] = {"Key_Menu", "Key_Home", "Key_Back"};
 #endif
     
@@ -806,9 +806,9 @@ static void goodix_ts_work_func(struct work_struct *work)
 					input_report_key(ts->input_dev, KEY_WAKEUP, 0);
 				input_sync(ts->input_dev);
 #else
-                input_report_key(ts->input_dev, KEY_WAKEUP, 1);
+                input_report_key(ts->input_dev, KEY_POWER, 1);
                 input_sync(ts->input_dev);
-                input_report_key(ts->input_dev, KEY_WAKEUP, 0);
+                input_report_key(ts->input_dev, KEY_POWER, 0);
                 input_sync(ts->input_dev);
 #endif
             }
@@ -2086,10 +2086,10 @@ static s8 gtp_request_input_dev(struct goodix_ts_data *ts)
     }
 #endif
 
-    //input_set_capability(ts->input_dev, EV_KEY, KEY_F10); //Added by luochangyang, 2014/02/19
+    input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP); //Added by luochangyang, 2014/02/19
 
 #if GTP_GESTURE_WAKEUP
-    input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);
+    input_set_capability(ts->input_dev, EV_KEY, KEY_POWER);
 #endif 
 
 #if GTP_CHANGE_X2Y

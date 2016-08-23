@@ -255,7 +255,7 @@ extern u8 gtp_cfg_version;	//move from .c file
 
 // STEP_4(optional): If keys are available and reported as keys, config your key info here                             
 #if GTP_HAVE_TOUCH_KEY
-    #define GTP_KEY_TAB  {KEY_MENU, KEY_HOME, KEY_BACK}
+    #define GTP_KEY_TAB  {KEY_MENU, KEY_HOMEPAGE, KEY_BACK}
 #endif
 
 //***************************PART3:OTHER define*********************************
