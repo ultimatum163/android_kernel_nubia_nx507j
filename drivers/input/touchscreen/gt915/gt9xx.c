@@ -84,7 +84,7 @@ u8 config[GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH]
     #define GTP_MAX_KEY_NUM  (sizeof(touch_key_array)/sizeof(touch_key_array[0]))
     
 #if GTP_DEBUG_ON
-    static const int  key_codes[] = {KEY_MENU, KEY_HOME, KEY_BACK};
+    static const int  key_codes[] = {KEY_MENU, KEY_HOMEPAGE, KEY_BACK};
     static const char *key_names[] = {"Key_Menu", "Key_Home", "Key_Back"};
 #endif
     
