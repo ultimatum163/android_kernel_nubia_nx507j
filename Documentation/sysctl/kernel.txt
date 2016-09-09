@@ -50,9 +50,9 @@ show up in /proc/sys/kernel:
 - overflowuid
 - panic
 - panic_on_oops
+- panic_on_stackoverflow
 - panic_on_unrecovered_nmi
 - perf_event_paranoid
-- panic_on_stackoverflow
 - pid_max
 - powersave-nap               [ PPC only ]
 - printk
@@ -407,6 +407,29 @@ the recommended setting is 60.
 
 ==============================================================
 
+panic_on_oops:
+
+Controls the kernel's behaviour when an oops or BUG is encountered.
+
+0: try to continue operation
+
+1: panic immediately.  If the `panic' sysctl is also non-zero then the
+   machine will be rebooted.
+
+==============================================================
+
+panic_on_stackoverflow:
+
+Controls the kernel's behavior when detecting the overflows of
+kernel, IRQ and exception stacks except a user stack.
+This file shows up if CONFIG_DEBUG_STACKOVERFLOW is enabled.
+
+0: try to continue operation.
+
+1: panic immediately.
+
+==============================================================
+
 panic_on_unrecovered_nmi:
 
 The default Linux behaviour on an NMI of either memory or unknown is
@@ -433,30 +456,6 @@ CONFIG_SECURITY_PERF_EVENTS_RESTRICT is set, or 1 otherwise.
 >=3: Disallow all event access by users without CAP_SYS_ADMIN
 
 ==============================================================
-
-panic_on_oops:
-
-Controls the kernel's behaviour when an oops or BUG is encountered.
-
-0: try to continue operation
-
-1: panic immediately.  If the `panic' sysctl is also non-zero then the
-   machine will be rebooted.
-
-==============================================================
-
-panic_on_stackoverflow:
-
-Controls the kernel's behavior when detecting the overflows of
-kernel, IRQ and exception stacks except a user stack.
-This file shows up if CONFIG_DEBUG_STACKOVERFLOW is enabled.
-
-0: try to continue operation.
-
-1: panic immediately.
-
-==============================================================
-
 
 pid_max:
 

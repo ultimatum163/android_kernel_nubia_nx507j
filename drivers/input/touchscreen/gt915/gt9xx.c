@@ -800,15 +800,15 @@ static void goodix_ts_work_func(struct work_struct *work)
 					GTP_INFO("Double click AA area to light up the screen!");
 					doze_status = DOZE_WAKEUP;
 #if 1			//add by luochangyang 2014/04/30
-					input_report_key(ts->input_dev, KEY_WAKEUP, 1);
+					input_report_key(ts->input_dev, KEY_F10, 1);
 				input_sync(ts->input_dev);
 
-					input_report_key(ts->input_dev, KEY_WAKEUP, 0);
+					input_report_key(ts->input_dev, KEY_F10, 0);
 				input_sync(ts->input_dev);
 #else
-                input_report_key(ts->input_dev, KEY_POWER, 1);
+                input_report_key(ts->input_dev, KEY_WAKEUP, 1);
                 input_sync(ts->input_dev);
-                input_report_key(ts->input_dev, KEY_POWER, 0);
+                input_report_key(ts->input_dev, KEY_WAKEUP, 0);
                 input_sync(ts->input_dev);
 #endif
             }
@@ -2086,10 +2086,10 @@ static s8 gtp_request_input_dev(struct goodix_ts_data *ts)
     }
 #endif
 
-    input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP); //Added by luochangyang, 2014/02/19
+    input_set_capability(ts->input_dev, EV_KEY, KEY_F10); //Added by luochangyang, 2014/02/19
 
 #if GTP_GESTURE_WAKEUP
-    input_set_capability(ts->input_dev, EV_KEY, KEY_POWER);
+    input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);
 #endif 
 
 #if GTP_CHANGE_X2Y
