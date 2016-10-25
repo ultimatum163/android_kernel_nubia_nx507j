@@ -4,15 +4,6 @@ menu "MSM SoC Audio support"
 config SND_MSM_DAI_SOC
 	tristate
 
-config ZTEMT_AUDIO_EXT_AMP
-       tristate "ZTEMT_AUDIO_EXT_AMP"
-
-config ZTEMT_AUDIO_HEADSET_SW
-       tristate "ZTEMT_AUDIO_EXT_AMP"
-
-config ZTEMT_AUDIO_MBHC_OPEN
-       tristate "ZTEMT_AUDIO_EXT_AMP"
-
 config SND_MSM_SOC_MSM7K
 	 tristate
 
@@ -172,6 +163,16 @@ config AUDIO_OCMEM
 	 OCMEM gets exercised for low-power
 	 audio and voice use cases.
 
+config DOLBY_DAP
+	bool "Enable Dolby DAP"
+	depends on SND_SOC_MSM8974
+	help
+	 To add support for dolby DAP post processing.
+	 This support is to configure the post processing parameters
+	 to DSP. The configuration includes sending the end point
+	 device, end point dependent post processing parameters and
+	 the various posrt processing parameters
+
 config SND_SOC_MSM8974
 	tristate "SoC Machine driver for MSM8974 boards"
 	depends on ARCH_MSM8974
@@ -182,6 +183,7 @@ config SND_SOC_MSM8974
 	select SND_SOC_WCD9320 if WCD9320_CODEC
 	select SND_DYNAMIC_MINORS
 	select AUDIO_OCMEM
+	select DOLBY_DAP
 	select SND_HWDEP
 	help
 	 To add support for SoC audio on MSM8974.
@@ -215,6 +217,7 @@ config SND_SOC_MSM8226
 	select SND_SOC_MSM_HOSTLESS_PCM
 	select SND_SOC_WCD9306
 	select SND_DYNAMIC_MINORS
+	select DOLBY_DAP
 	help
 	 To add support for SoC audio on MSM8226.
 	 This will enable sound soc drivers which

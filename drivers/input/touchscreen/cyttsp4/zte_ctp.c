@@ -129,7 +129,7 @@ static struct cyttsp4_loader_platform_data _cyttsp4_loader_platform_data = {
 #ifdef CONFIG_CYTTSP4_5P5_INCH_OTG_GW //goworld 5.5 inch NX505J
 #define CY_MAXX 1080
 #define CY_MAXY 1920
-#define CYTTSP4_FIRMEARE_VERSION    0x0809
+#define CYTTSP4_FIRMEARE_VERSION    0x0806
 #endif
 
 #ifdef CONFIG_CYTTSP4_5P0_INCH_OTG_GW //goworld 5 inch otg tp for NX501

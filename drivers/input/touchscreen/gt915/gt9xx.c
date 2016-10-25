@@ -84,7 +84,7 @@ u8 config[GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH]
     #define GTP_MAX_KEY_NUM  (sizeof(touch_key_array)/sizeof(touch_key_array[0]))
     
 #if GTP_DEBUG_ON
-    static const int  key_codes[] = {KEY_MENU, KEY_HOMEPAGE, KEY_BACK};
+    static const int  key_codes[] = {KEY_MENU, KEY_HOME, KEY_BACK};
     static const char *key_names[] = {"Key_Menu", "Key_Home", "Key_Back"};
 #endif
     
@@ -743,7 +743,7 @@ static void goodix_ts_work_func(struct work_struct *work)
         ret = gtp_i2c_read(i2c_connect_client, doze_buf, 3);
         GTP_DEBUG("0x814B = 0x%02X", doze_buf[2]);
         if (ret > 0)
-        {     
+        {
 #if 0
             if ((doze_buf[2] == 'a') || (doze_buf[2] == 'b') || (doze_buf[2] == 'c') ||
                 (doze_buf[2] == 'd') || (doze_buf[2] == 'e') || (doze_buf[2] == 'g') || 
@@ -800,18 +800,17 @@ static void goodix_ts_work_func(struct work_struct *work)
 					GTP_INFO("Double click AA area to light up the screen!");
 					doze_status = DOZE_WAKEUP;
 #if 1			//add by luochangyang 2014/04/30
-					input_report_key(ts->input_dev, KEY_F10, 1);
-				input_sync(ts->input_dev);
-
-					input_report_key(ts->input_dev, KEY_F10, 0);
-				input_sync(ts->input_dev);
+					input_report_key(ts->input_dev, KEY_WAKEUP, 1);
+					input_sync(ts->input_dev);
+					input_report_key(ts->input_dev, KEY_WAKEUP, 0);
+					input_sync(ts->input_dev);
 #else
-                input_report_key(ts->input_dev, KEY_WAKEUP, 1);
-                input_sync(ts->input_dev);
-                input_report_key(ts->input_dev, KEY_WAKEUP, 0);
-                input_sync(ts->input_dev);
+                			input_report_key(ts->input_dev, KEY_WAKEUP, 1);
+                			input_sync(ts->input_dev);
+                			input_report_key(ts->input_dev, KEY_WAKEUP, 0);
+                			input_sync(ts->input_dev);
 #endif
-            }
+            			}
             }
 
                 // clear 0x814B
@@ -2086,7 +2085,7 @@ static s8 gtp_request_input_dev(struct goodix_ts_data *ts)
     }
 #endif
 
-    input_set_capability(ts->input_dev, EV_KEY, KEY_F10); //Added by luochangyang, 2014/02/19
+    //input_set_capability(ts->input_dev, EV_KEY, KEY_F10); //Added by luochangyang, 2014/02/19
 
 #if GTP_GESTURE_WAKEUP
     input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);

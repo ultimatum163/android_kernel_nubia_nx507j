@@ -838,7 +838,6 @@ static inline bool __mdss_dsi_cmd_mode_config(
 				dsi_ctrl | BIT(2));
 			mode_changed = true;
 		}
-		ctrl->dmap_iommu_map = true;
 	} else {
 		MIPI_OUTP((ctrl->ctrl_base) + 0x0004, dsi_ctrl & ~BIT(2));
 	}
@@ -1385,6 +1384,7 @@ need_lock:
 	return ret;
 }
 
+#ifdef CONFIG_DEBUG_FS
 void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -1418,6 +1418,7 @@ void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata)
 	}
 	pr_info(" ============ finish waiting for TE ============\n");
 }
+#endif
 
 static void dsi_send_events(struct mdss_dsi_ctrl_pdata *ctrl, u32 events)
 {

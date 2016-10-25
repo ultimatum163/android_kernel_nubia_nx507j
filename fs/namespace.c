@@ -1070,9 +1070,6 @@ void umount_tree(struct mount *mnt, int propagate, struct list_head *kill)
 	for (p = mnt; p; p = next_mnt(p, mnt))
 		list_move(&p->mnt_hash, &tmp_list);
 
-	list_for_each_entry(p, &tmp_list, mnt_hash)
-		list_del_init(&p->mnt_child);
-
 	if (propagate)
 		propagate_umount(&tmp_list);
 
@@ -1157,8 +1154,6 @@ static int do_umount(struct mount *mnt, int flags)
 		 * Special case for "unmounting" root ...
 		 * we just try to remount it readonly.
 		 */
-		if (!capable(CAP_SYS_ADMIN))
-			return -EPERM;
 		down_write(&sb->s_umount);
 		if (!(sb->s_flags & MS_RDONLY))
 			retval = do_remount_sb(sb, MS_RDONLY, NULL, 0);
@@ -1339,8 +1334,11 @@ struct vfsmount *collect_mounts(struct path *path)
 {
 	struct mount *tree;
 	down_write(&namespace_sem);
-	tree = copy_tree(real_mount(path->mnt), path->dentry,
-			 CL_COPY_ALL | CL_PRIVATE);
+	if (!check_mnt(real_mount(path->mnt)))
+		tree = ERR_PTR(-EINVAL);
+	else
+		tree = copy_tree(real_mount(path->mnt), path->dentry,
+				 CL_COPY_ALL | CL_PRIVATE);
 	up_write(&namespace_sem);
 	if (IS_ERR(tree))
 		return NULL;
@@ -1923,10 +1921,6 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 	err = do_add_mount(real_mount(mnt), path, mnt_flags);
 	if (err)
 		mntput(mnt);
-
-//	if (!err && !strcmp(fstype, "ext4") && !strcmp(path->dentry->d_name.name, "data"))
-//		mnt->mnt_sb->fsync_flags |= FLAG_ASYNC_FSYNC;
-
 	return err;
 }
 
@@ -2425,9 +2419,9 @@ SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		char __user *, type, unsigned long, flags, void __user *, data)
 {
 	int ret;
-	char *kernel_type = NULL;
-	char *kernel_dir = NULL;
-	char *kernel_dev = NULL;
+	char *kernel_type;
+	char *kernel_dir;
+	char *kernel_dev;
 	unsigned long data_page;
 
 	ret = copy_mount_string(type, &kernel_type);

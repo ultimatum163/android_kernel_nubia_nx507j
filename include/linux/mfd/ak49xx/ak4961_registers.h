@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,8 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
 #ifndef AK4961_CODEC_DIGITAL_H
+
 #define AK4961_CODEC_DIGITAL_H
 
 #define	FLOW_CONTROL_1				(0x0000)
@@ -255,11 +255,6 @@
 #define CREG5_SETTING				(0x0107)
 #define CREG6_SETTING				(0x0108)
 #define CREG7_SETTING				(0x0109)
-#define DSPI1_VIRT_MIXER			(0x010A)
-#define DSPI2_VIRT_MIXER			(0x010B)
-#define DSPI3_VIRT_MIXER			(0x010C)
-#define DSPI4_VIRT_MIXER			(0x010D)
-#define DSPI5_VIRT_MIXER			(0x010E)
 
 /* Default Value */
 #define	FLOW_CONTROL_1_POR			(0x00)
@@ -367,9 +362,9 @@
 #define	SBO2_SOURCE_SELECTOR_POR			(0x00)
 #define	DAC1_SOURCE_SELECTOR_POR			(0x00)
 #define	DAC2_SOURCE_SELECTOR_POR			(0x00)
-#define	DSPI1_SOURCE_SELECTOR_POR			(0x00)
+#define	DSPI1_SOURCE_SELECTOR_POR			(0x29)
 #define	DSPI2_SOURCE_SELECTOR_POR			(0x00)
-#define	DSPI3_SOURCE_SELECTOR_POR			(0x00)
+#define	DSPI3_SOURCE_SELECTOR_POR			(0x0A)
 #define	DSPI4_SOURCE_SELECTOR_POR			(0x00)
 #define	DSPI5_SOURCE_SELECTOR_POR			(0x00)
 #define	MIXAI1_SOURCE_SELECTOR_POR			(0x00)
@@ -504,9 +499,5 @@
 #define	CREG5_SETTING_POR			(0x00)
 #define	CREG6_SETTING_POR			(0x00)
 #define	CREG7_SETTING_POR			(0x00)
-#define DSPI1_VIRT_MIXER_POR			(0x00)
-#define DSPI2_VIRT_MIXER_POR			(0x00)
-#define DSPI3_VIRT_MIXER_POR			(0x00)
-#define DSPI4_VIRT_MIXER_POR			(0x00)
-#define DSPI5_VIRT_MIXER_POR			(0x00)
+
 #endif

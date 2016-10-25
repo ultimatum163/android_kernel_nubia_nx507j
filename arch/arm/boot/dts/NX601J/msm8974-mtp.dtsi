@@ -39,10 +39,59 @@
 	};
 
 	qcom,hdmi_tx@fd922100 {
-		status = "disabled";
+		status = "ok";
 	};
 
+    i2c@f9923000 {
+		anx7808_i2c_adapter@72 {
+			status = "okay";
+			compatible = "slimport,anx7808_i2c_adapter";
+			reg = <0x72>;
+			interrupts = <27 0x3>;
+			anx7808-pdown-gpio = <&msmgpio 26 0x00>;
+			anx7808-reset-gpio = <&msmgpio 78 0x00>;
+			anx7808-int-gpio = <&msmgpio 102 0x00>;
+			anx7808-cbl-gpio = <&msmgpio 27 0x00>;
+			anx7808-v10-gpio = <&msmgpio 14 0x00>;
+			smps3a-supply = <&pm8941_s3>;
+			vreg_l18-supply = <&pm8941_l18>;
+		};
+
+		/*add by swang  battery fuel guage*/
+		max17050_i2c_adapter@36 {
+			compatible = "maxim,max17050";
+			reg = <0x36>;
+			interrupt-parent = <&msmgpio>;
+			maxin-rsns-momh = <10>;
+			maxin-current-sensing = <1>;
+			maxin-irq-gpio = <54>;
+			maxin-filter-cfg = <0x87A4>;
+			maxin-relax-cfg = <0>;
+			maxin-fullsoc-thr = <0x5F00>;
+			maxin-rccomp0 = <0x005A>;
+			maxin-tmpco = <0x192A>;
+			maxin-term-curr = <0x0333>;
+			maxin-tgain= <0x24D5>;
+			maxin-toff = <0xE747>;
+			maxin-vempty = <0xACDA>;
+			maxin-qrtable00 = <0x8200>;
+			maxin-qrtable10 = <0x348A>;
+			maxin-qrtable20 = <0x1D04>;
+			maxin-qrtable30 = <0x1587>;
+			maxin-capacity = <0x218A>;
+			maxin-vf-fullcap = <0x218A>;
+			maxin-custome-model = [
+			    9A60  A980  B700  B860  B9C0  BBF0  BC90  BD60
+			    BE50  BF50  C260  C730  C9B0  CC50  D1C0  D7C0
+				0100  0110  1010  0C00  1100  2420  1E60  1480
+				15A0  0DE0  08C0  08E0  08F0  07D0  0550  0550
+				0180  0180  0180  0180  0180  0180  0180  0180
+				0180  0180  0180  0180  0180  0180  0180  0180
+			];
+		};
+	};
 	i2c@f9924000 {
+		/*ZTEMT Added by luochangyang, 2013/12/19*/
 		cyttsp_i2c_adapter@24 {
 			compatible = "cy,cyttsp5_i2c_adapter";
 			reg = <0x24>;
@@ -188,6 +237,15 @@
 	                interrupt-parent = <&msmgpio>;
 	        };
 		// ADDED BY ZTEMT ZhuBing END
+		nxp_i2c_adapter@28 {
+			compatible = "nxp,i2c_adapter";
+			reg = <0x28>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <80 0x2>;
+			nxp,updata-gpio = <&msmgpio 13 0x00>;
+			nxp,ven-gpio = <&msmgpio 85 0x00>;
+			nxp,irq-gpio = <&msmgpio 80 0x00>;
+		};
 	};
 
 	i2c@f9967000 {
@@ -211,12 +269,30 @@
 				regulator-max-microamp = <9360>;
 			};
 		};
+		drv2605@5a {
+			reg = <0x5a>;
+			compatible = "immersion,drv2605";
+			immersion,gpio-enable = <&msmgpio 86 0x00>;
+			immersion,actuator {
+				actuator,type = <0x01>;	/* 0:ERM 1:LRA */
+				actuator,effect-bank = <0x06>; /* LIBRARY_F */
+				actuator,loop = <0x01>; /* 0:OPEN_LOOP 1:CLOSE_LOOP */
+				actuator,rated-vol = <0x38>;
+				actuator,over-drive-vol = <0x72>;
+			};
+			immersion,audio2haptics {
+				a2h,min-input = <0x19>;
+				a2h,max-input = <0xff>;
+				a2h,min-output = <0x19>;
+				a2h,max-output = <0xff>;
+			};
+		};
 		aw9106b_i2c_adapter@5b {
 			compatible = "aw,9106b";
 			reg = <0x5b>;
 			interrupt-parent = <&msmgpio>;
 		};
-		// ADDED BY ZTEMT BaoQi 2015-01-15
+		// ADDED BY ZTEMT ZhuBing
 		// add the als/prox/gesture sensor and IR-remote control
 	    	ams-sensor_i2c_adapter@39 {
 	                status = "okay";
@@ -224,17 +300,6 @@
 	                compatible = "ams,ams-sensor";
 	                interrupt-parent = <&msmgpio>;
 	                ams,irq-gpio = <&msmgpio 9 0x00>;
-	                ams,light-percent = <100>;
-
-	                //for tmg3993
-	                ams,prox-offset-cal-ability-tmg399x = <15>;
-	                ams,prox-led-plus-cnt-tmg399x = <4>;
-	                ams,gesture-offset-cal-ability-tmg399x = <35>;
-	                ams,gesture-led-plus-cnt-tmg399x = <4>;
-
-	                //for tmd2772
-	                ams,prox-offset-cal-ability-tmd2772 = <8>;
-	                ams,prox-led-plus-cnt-tmd2772 = <12>;
 	        };
 
 	        maxq616_i2c_adapter@11 {
@@ -259,7 +324,7 @@
 	                compatible = "zte,sensor_common";
 	                compass,irq-gpio = <&msmgpio 64 0x00>;
 	        };
-		// ADDED BY ZTEMT BaoQi END
+		// ADDED BY ZTEMT ZhuBing END
 	};
 
 	gpio_keys {
@@ -318,8 +383,39 @@
 
 	sound {
 		qcom,model = "msm8974-taiko-mtp-snd-card";
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"LDO_H", "MCLK",
+			"AIF4 MAD", "MCLK",
+			"AMIC1", "MIC BIAS1 Internal1",
+			"MIC BIAS1 Internal1", "Handset Mic",
+			"AMIC2", "MIC BIAS2 External",
+			"MIC BIAS2 External", "Headset Mic",
+			"AMIC3", "MIC BIAS2 External",
+			"MIC BIAS2 External", "ANCRight Headset Mic",
+			"AMIC4", "MIC BIAS2 External",
+			"MIC BIAS2 External", "ANCLeft Headset Mic",
+			"DMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Digital Mic1",
+			"DMIC2", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Digital Mic2",
+			"DMIC3", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Digital Mic3",
+			"DMIC4", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Digital Mic4",
+			"DMIC5", "MIC BIAS4 External",
+			"MIC BIAS4 External", "Digital Mic5",
+			"DMIC6", "MIC BIAS4 External",
+			"MIC BIAS4 External", "Digital Mic6",
+			"Lineout_1 amp", "LINEOUT1",
+			"Lineout_3 amp", "LINEOUT3";
+		
+		qcom,ext-lineout1-amp-gpio = <&msmgpio 16 0>;
+		qcom,ext-lineout3-amp-gpio = <&msmgpio 23 0>;
+		qcom,mbhc-switch-enable-gpio = <&msmgpio 96 0>;
 		qcom,cdc-micbias2-headset-only;
-		qcom,mbhc-audio-jack-type = "6-pole-jack";
+		qcom,mbhc-audio-jack-type = "4-pole-jack";
+		qcom,hdmi-audio-rx;
 	};
 };
 
@@ -333,13 +429,13 @@
 			qcom,cs-out-en;
 			qcom,op-fdbck = <1>;
 			qcom,default-state = "on";
-			qcom,max-current = <25>;
+			qcom,max-current = <21>;
 			qcom,ctrl-delay-us = <0>;
 			qcom,boost-curr-lim = <5>;
 			qcom,cp-sel = <0>;
 			qcom,switch-freq = <11>;
 			qcom,ovp-val = <2>;
-			qcom,num-strings = <3>;
+			qcom,num-strings = <2>;
 			qcom,id = <0>;
 		};
 	};
@@ -446,7 +542,7 @@
 	qcom,pad-pull-off = <0x0 0x3 0x3>; /* no-pull, pull-up, pull-up */
 	qcom,pad-drv-on = <0x4 0x4 0x4>; /* 10mA, 10mA, 10mA */
 	qcom,pad-drv-off = <0x0 0x0 0x0>; /* 2mA, 2mA, 2mA */
-	status = "ok";
+	status = "disabled";
 };
 
 /* Drive strength recommendations for clock line from hardware team is 10 mA.
@@ -813,10 +909,6 @@
 
 &slim_msm {
 	taiko_codec {
-		qcom,cdc-micbias1-ext-cap;
-		qcom,cdc-micbias2-ext-cap;
-		qcom,cdc-micbias3-ext-cap;
-		qcom,cdc-micbias4-ext-cap;
 	};
 };
 

@@ -13,10 +13,13 @@
 
 /include/ "zte-dsi-panel-sharp-2k-5p5-dual-mipi0-video.dtsi"
 /include/ "zte-dsi-panel-sharp-2k-5p5-dual-mipi1-video.dtsi"
+
 /*
 /include/ "zte-dsi-panel-sharp-2k-5p5-dual-mipi0-cmd.dtsi"
 /include/ "zte-dsi-panel-sharp-2k-5p5-dual-mipi1-cmd.dtsi"
+*/
 
+/*
 /include/ "../dsi-panel-orise-720p-video.dtsi"
 /include/ "../dsi-panel-toshiba-720p-video.dtsi"
 /include/ "../dsi-panel-sharp-qhd-video.dtsi"

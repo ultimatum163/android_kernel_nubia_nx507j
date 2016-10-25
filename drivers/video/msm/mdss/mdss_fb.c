@@ -225,7 +225,6 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 
 static int lcd_backlight_registered;
 
-#ifdef CONFIG_ZTEMT_LCD_BACKLIGHT_LINEAR_CONTROL_METHOLD
 static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 				      enum led_brightness value)
 {
@@ -262,36 +261,13 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 		mutex_unlock(&mfd->bl_lock);
 	}
 }
-#else
-static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
-				      enum led_brightness value)
-{
-	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
-	int bl_lvl;
 
-	if (value > mfd->panel_info->brightness_max)
-		value = mfd->panel_info->brightness_max;
-
-	/* This maps android backlight level 0 to 255 into
-	   driver backlight level 0 to bl_max with rounding */
-	MDSS_BRIGHT_TO_BL(bl_lvl, value, mfd->panel_info->bl_max,
-				mfd->panel_info->brightness_max);
-
-	if (!bl_lvl && value)
-		bl_lvl = 1;
-
-	if (!IS_CALIB_MODE_BL(mfd) && (!mfd->ext_bl_ctrl || !value ||
-							!mfd->bl_level)) {
-		mutex_lock(&mfd->bl_lock);
-		mdss_fb_set_backlight(mfd, bl_lvl);
-		mutex_unlock(&mfd->bl_lock);
-	}
-}
-#endif
+#define MDSS_DEFAULT_BL_BRIGHTNESS 61
 
 static struct led_classdev backlight_led = {
 	.name           = "lcd-backlight",
-	.brightness     = MDSS_MAX_BL_BRIGHTNESS,
+	//.brightness     = MDSS_MAX_BL_BRIGHTNESS,//set default brightness as MDSS_DEFAULT_BL_BRIGHTNESS
+	.brightness     = MDSS_DEFAULT_BL_BRIGHTNESS,
 	.brightness_set = mdss_fb_set_bl_brightness,
 };
 
@@ -346,6 +322,10 @@ static void mdss_fb_parse_dt(struct msm_fb_data_type *mfd)
 
 	panel_xres = mfd->panel_info->xres;
 	if (data[0] && data[1]) {
+		
+		pr_info("mfd->split_display=%d, panel_xres = %d\n",
+				mfd->split_display, panel_xres);
+
 		if (mfd->split_display)
 			panel_xres *= 2;
 
@@ -359,6 +339,7 @@ static void mdss_fb_parse_dt(struct msm_fb_data_type *mfd)
 		else
 			mfd->split_fb_left = mfd->split_fb_right = 0;
 	}
+
 	pr_info("split framebuffer left=%d right=%d\n",
 		mfd->split_fb_left, mfd->split_fb_right);
 }
@@ -632,7 +613,6 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	mfd->ext_ad_ctrl = -1;
 	mfd->bl_level = 0;
-	mfd->bl_level_prev_scaled = 0;
 	mfd->bl_scale = 1024;
 	mfd->bl_min_lvl = 30;
 	mfd->ad_bl_level = 0;
@@ -669,8 +649,14 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	/* android supports only one lcd-backlight/lcd for now */
 	if (!lcd_backlight_registered) {
-
+		
+/*Modify by luochangyang for backlight change in booting  2014/06/25*/
+#ifndef CONFIG_ZTEMT_LCD_MIPI_COMMON
 		backlight_led.brightness = mfd->panel_info->brightness_max;
+#else
+		backlight_led.brightness = MDSS_DEFAULT_BL_BRIGHTNESS;
+#endif
+/*luochangyang END*/
 		backlight_led.max_brightness = mfd->panel_info->brightness_max;
 		if (led_classdev_register(&pdev->dev, &backlight_led))
 			pr_err("led_classdev_register failed\n");
@@ -947,13 +933,10 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 	}
 	pr_debug("output = %d", temp);
 
+	//pr_info("%s: temp = %d, bl_scale = %d\n", __func__, temp, mfd->bl_scale);
+
 	(*bl_lvl) = temp;
 }
-
-//ZTEMT: peijun added for camera control backlight -----start
-struct msm_fb_data_type *zte_camera_mfd;
-int  camera_set_backlight = 0;
-//ZTEMT: peijun added for camera control backlight -----end
 
 /* must call this function from within mfd->bl_lock */
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
@@ -971,14 +954,6 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		mfd->unset_bl_level = 0;
 	}
 
-	 //ZTEMT: peijun added for camera control backlight -----start
-	 zte_camera_mfd = mfd;
-        if(camera_set_backlight==1) {
-	  pr_err("camera is setting backlight, return!!\n");
-	  return;
-        }
-	//ZTEMT: peijun added for camera control backlight -----end
-	
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
 	if ((pdata) && (pdata->set_backlight)) {
@@ -988,7 +963,6 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		if (bl_notify_needed)
 			mdss_fb_bl_update_notify(mfd);
 
-		mfd->bl_level_prev_scaled = mfd->bl_level_scaled;
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
 		/*
@@ -999,14 +973,15 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		 * as well as setting bl_level to bkl_lvl even though the
 		 * backlight has been set to the scaled value.
 		 */
-		if (mfd->bl_level_scaled == temp) {
+		if (mfd->bl_level_old == temp) {
 			mfd->bl_level = bkl_lvl;
+            printk(KERN_INFO "[LCD]: %s: %d: same bl_level(%d), just return\n",__func__,__LINE__,bkl_lvl);
 		} else {
 			pr_debug("backlight sent to panel :%d\n", temp);
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level = bkl_lvl;
-			mfd->bl_level_scaled = temp;
- 		}
+			mfd->bl_level_old = temp;
+		}
 	}
 }
 
@@ -1029,11 +1004,8 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 				if (bl_notify)
 					mdss_fb_bl_update_notify(mfd);
 				pdata->set_backlight(pdata, temp);
-				mfd->bl_level_scaled = mfd->unset_bl_level;
+				mfd->bl_level_old = mfd->unset_bl_level;
 				mfd->bl_updated = 1;
-				//ZTEMT: peijun added for camera control backlight -----start
-				zte_camera_mfd = mfd;
-				//ZTEMT: peijun added for camera control backlight -----end
 			}
 		}
 		mutex_unlock(&mfd->bl_lock);
@@ -1056,6 +1028,9 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_UNBLANK:
 		if (!mfd->panel_power_on && mfd->mdp.on_fnc) {
 			ret = mfd->mdp.on_fnc(mfd);
+			
+			pr_info("%s.\n", __func__);
+			
 			if (ret == 0) {
 				mfd->panel_power_on = true;
 				mfd->panel_info->panel_dead = false;
@@ -1070,13 +1045,6 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 				schedule_delayed_work(&mfd->idle_notify_work,
 					msecs_to_jiffies(mfd->idle_time));
 		}
-
-		mutex_lock(&mfd->bl_lock);
-		if (!mfd->bl_updated) {
-			mfd->bl_updated = 1;
-			mdss_fb_set_backlight(mfd, mfd->bl_level_prev_scaled);
-		}
-		mutex_unlock(&mfd->bl_lock);
 		break;
 
 	case FB_BLANK_VSYNC_SUSPEND:
@@ -1098,9 +1066,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 			mfd->op_enable = false;
 			curr_pwr_state = mfd->panel_power_on;
-			mutex_lock(&mfd->bl_lock);
-			mdss_fb_set_backlight(mfd, 0);
 			mfd->panel_power_on = false;
+			mutex_lock(&mfd->bl_lock);
 			mfd->bl_updated = 0;
 			mutex_unlock(&mfd->bl_lock);
 
@@ -1333,7 +1300,7 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 
 			if (mfd->mdp_fb_page_protection ==
 					MDP_FB_PAGE_PROTECTION_WRITECOMBINE)
-			vma->vm_page_prot =
+				vma->vm_page_prot =
 					pgprot_writecombine(vma->vm_page_prot);
 
 			pr_debug("vma=%p, addr=%x len=%ld",
@@ -1378,6 +1345,7 @@ static int mdss_fb_physical_mmap(struct fb_info *info,
 	u32 len = PAGE_ALIGN((start & ~PAGE_MASK) + info->fix.smem_len);
 	unsigned long off = vma->vm_pgoff << PAGE_SHIFT;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+
 	if (!start) {
 		pr_warn("No framebuffer memory is allocated\n");
 		return -ENOMEM;
@@ -1475,6 +1443,9 @@ static int mdss_fb_alloc_fbmem_iommu(struct msm_fb_data_type *mfd, int dom)
 	}
 
 	pr_debug("%s frame buffer reserve_size=0x%zx\n", __func__, size);
+
+	pr_info("%s frame buffer size=0x%x\n", __func__, PAGE_ALIGN(mfd->fbi->fix.line_length *
+			      mfd->fbi->var.yres_virtual));
 
 	if (size < PAGE_ALIGN(mfd->fbi->fix.line_length *
 			      mfd->fbi->var.yres_virtual))

@@ -1510,8 +1510,7 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		mrq->cmd->error = -EIO;
 		if (mrq->data)
 			mrq->data->error = -EIO;
-		mmc_request_done(host->mmc, mrq);
-		sdhci_runtime_pm_put(host);
+		tasklet_schedule(&host->finish_tasklet);
 		return;
 	}
 
@@ -1566,6 +1565,8 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 					mmc->card->type == MMC_TYPE_MMC ?
 					MMC_SEND_TUNING_BLOCK_HS200 :
 					MMC_SEND_TUNING_BLOCK;
+				host->mrq = NULL;
+				host->flags &= ~SDHCI_NEEDS_RETUNING;
 				spin_unlock_irqrestore(&host->lock, flags);
 				sdhci_execute_tuning(mmc, tuning_opcode);
 				spin_lock_irqsave(&host->lock, flags);
@@ -2033,8 +2034,8 @@ static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
 				 */
 				present_state = sdhci_readl(host,
 							SDHCI_PRESENT_STATE);
-				if ((present_state & SDHCI_DATA_LVL_MASK) ==
-				     SDHCI_DATA_LVL_MASK)
+/*				if ((present_state & SDHCI_DATA_LVL_MASK) ==
+				     SDHCI_DATA_LVL_MASK)*/
 					return 0;
 			}
 		}
@@ -2597,8 +2598,7 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 		if (host->cmd->error == -EILSEQ &&
 		    (command != MMC_SEND_TUNING_BLOCK_HS400) &&
 		    (command != MMC_SEND_TUNING_BLOCK_HS200) &&
-		    (command != MMC_SEND_TUNING_BLOCK) &&
-		    (command != MMC_SEND_STATUS))
+		    (command != MMC_SEND_TUNING_BLOCK))
 				host->flags |= SDHCI_NEEDS_RETUNING;
 		tasklet_schedule(&host->finish_tasklet);
 		return;

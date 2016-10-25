@@ -198,13 +198,13 @@ static void hall_device_irq_work_n(struct work_struct *work)
     if (0 == gpio_get_value(chip->irq_n.irq_pin))
     {
         SENSOR_LOG_INFO("MAGNETIC_DEVICE NEAR\n");
-        input_report_rel(chip->idev, REL_RY, MAGNETIC_DEVICE_NEAR);
+        input_report_rel(chip->idev, REL_RX, MAGNETIC_DEVICE_NEAR);
         hall_device_wakelock_ops(&(chip->wakeup_wakelock),false);
     }
     else
     {
         SENSOR_LOG_INFO("MAGNETIC_DEVICE FAR\n");
-        input_report_rel(chip->idev, REL_RY, MAGNETIC_DEVICE_FAR);
+        input_report_rel(chip->idev, REL_RX, MAGNETIC_DEVICE_FAR);
         hrtimer_start(&chip->unlock_wakelock_timer, ktime_set(3, 0), HRTIMER_MODE_REL);
     }
     input_sync(chip->idev);

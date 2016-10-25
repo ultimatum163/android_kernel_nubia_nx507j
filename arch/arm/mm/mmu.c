@@ -579,7 +579,7 @@ static void __init build_mem_type_table(void)
 #endif
 
 	for (i = 0; i < 16; i++) {
-		pteval_t v = pgprot_val(protection_map[i]);
+		unsigned long v = pgprot_val(protection_map[i]);
 		protection_map[i] = __pgprot(v | user_pgprot);
 	}
 
@@ -1571,6 +1571,8 @@ static void __init remap_pages(void)
 		bool fixup = false, end_fixup = false;
 		unsigned long saved_start = addr;
 
+		if (phys_start > arm_lowmem_limit)
+			break;
 		if (phys_end > arm_lowmem_limit)
 			end = (unsigned long)__va(arm_lowmem_limit);
 		if (phys_start >= phys_end)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,9 +33,9 @@ struct ak49xx_micbias_setting {
  *
  *      <POWER_SUPPLY_PIN_NAME> from ak496x objective spec
 */
-#define  AK49XX_AVDD1_CUR_MAX	20000
+#define  AK49XX_AVDD1_CUR_MAX	100000
 #define  AK49XX_AVDD2_CUR_MAX	20000
-#define  AK49XX_CVDD_CUR_MAX	150000
+#define  AK49XX_CVDD_CUR_MAX	50000
 #define  AK49XX_TVDD1_CUR_MAX	10000
 #define  AK49XX_TVDD2_CUR_MAX	5000
 #define  AK49XX_TVDD2_CUR_MAX	5000
@@ -55,7 +55,6 @@ struct ak49xx_pdata {
 	int irq_base;
 	int num_irqs;
 	int reset_gpio;
-	int cif1_gpio;
 	struct slim_device slimbus_slave_device;
 	struct ak49xx_micbias_setting micbias;
 	struct ak49xx_regulator regulator[AK49XX_MAX_REGULATOR];

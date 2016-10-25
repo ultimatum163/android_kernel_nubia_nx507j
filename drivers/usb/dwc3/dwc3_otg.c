@@ -113,17 +113,6 @@ static int dwc3_otg_set_suspend(struct usb_phy *phy, int suspend)
 	return 0;
 }
 
-static void dwc3_otg_set_hsphy_auto_suspend(struct dwc3_otg *dotg, bool susp);
-static int dwc3_otg_set_autosuspend(struct usb_phy *phy, int enable_autosuspend)
-{
-	struct usb_otg *otg = phy->otg;
-	struct dwc3_otg *dotg = container_of(otg, struct dwc3_otg, otg);
-
-	dwc3_otg_set_hsphy_auto_suspend(dotg, enable_autosuspend);
-
-	return 0;
-}
-
 static void dwc3_otg_set_hsphy_auto_suspend(struct dwc3_otg *dotg, bool susp)
 {
 	struct dwc3 *dwc = dotg->dwc;
@@ -423,6 +412,7 @@ static void dwc3_ext_chg_det_done(struct usb_otg *otg, struct dwc3_charger *chg)
 	#ifdef CONFIG_ZTEMT_CHARGE_BQ24192
 	bq24192_notify_charger(chg->chg_type);
 	#endif
+
 
 #ifdef CONFIG_ZTEMT_COMM_CHARGE
 	 qpnp_notify_charger_of_the_charger_type((int)chg->chg_type);
@@ -1047,7 +1037,6 @@ int dwc3_otg_init(struct dwc3 *dwc)
 	dotg->otg.phy->dev = dwc->dev;
 	dotg->otg.phy->set_power = dwc3_otg_set_power;
 	dotg->otg.phy->set_suspend = dwc3_otg_set_suspend;
-	dotg->otg.phy->set_phy_autosuspend = dwc3_otg_set_autosuspend;
 
 	ret = usb_set_transceiver(dotg->otg.phy);
 	if (ret) {

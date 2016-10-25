@@ -43,6 +43,7 @@
 #define KGSL_CMD_FLAGS_WFI              BIT(2)
 #define KGSL_CMD_FLAGS_PROFILE		BIT(3)
 #define KGSL_CMD_FLAGS_PWRON_FIXUP      BIT(4)
+#define KGSL_CMD_FLAGS_MEMLIST          BIT(5)
 
 /* Command identifiers */
 #define KGSL_CONTEXT_TO_MEM_IDENTIFIER	0x2EADBEEF
@@ -63,8 +64,6 @@
 #else
 #define ADRENO_DEFAULT_PWRSCALE_POLICY  NULL
 #endif
-
-void adreno_debugfs_init(struct kgsl_device *device);
 
 #define ADRENO_ISTORE_START 0x5000 /* Istore offset */
 
@@ -440,6 +439,12 @@ struct log_field {
 	{ BIT(KGSL_FT_TEMP_DISABLE), "temp" }, \
 	{ BIT(KGSL_FT_THROTTLE), "throttle"}, \
 	{ BIT(KGSL_FT_SKIPCMD), "skipcmd" }
+
+#define ADRENO_CMDBATCH_FLAGS \
+	{ KGSL_CMDBATCH_CTX_SWITCH, "CTX_SWITCH" }, \
+	{ KGSL_CMDBATCH_SYNC, "SYNC" }, \
+	{ KGSL_CMDBATCH_END_OF_FRAME, "EOF" }, \
+	{ KGSL_CMDBATCH_PWR_CONSTRAINT, "PWR_CONSTRAINT" }
 
 extern struct adreno_gpudev adreno_a2xx_gpudev;
 extern struct adreno_gpudev adreno_a3xx_gpudev;
@@ -952,11 +957,5 @@ static inline void adreno_set_protected_registers(struct kgsl_device *device,
 	kgsl_regwrite(device, A3XX_CP_PROTECT_REG_0 + *index, val);
 	*index = *index + 1;
 }
-
-#ifdef CONFIG_DEBUG_FS
-void adreno_debugfs_init(struct kgsl_device *device);
-#else
-static inline void adreno_debugfs_init(struct kgsl_device *device) { }
-#endif
 
 #endif /*__ADRENO_H */

@@ -300,7 +300,9 @@ struct inodes_stat_t {
 #define BLKSSZGET  _IO(0x12,104)/* get block device sector size */
 #if 0
 #define BLKPG      _IO(0x12,105)/* See blkpg.h */
+
 /* Some people are morons.  Do not use sizeof! */
+
 #define BLKELVGET  _IOR(0x12,106,size_t)/* elevator get */
 #define BLKELVSET  _IOW(0x12,107,size_t)/* elevator set */
 /* This was here just to show that the number is taken -

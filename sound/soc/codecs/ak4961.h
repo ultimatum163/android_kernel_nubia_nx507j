@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,7 +16,7 @@
 #include <sound/apr_audio-v2.h>
 #include <linux/mfd/ak49xx/ak49xx-slimslave.h>
 
-#define AK4961_NUM_REGISTERS 271
+#define AK4961_NUM_REGISTERS 266
 #define AK4961_MAX_REGISTER (AK4961_NUM_REGISTERS-1)
 #define AK4961_CACHE_SIZE AK4961_NUM_REGISTERS
 
@@ -30,12 +30,6 @@ extern const u8 ak4961_reg_defaults[AK4961_CACHE_SIZE];
 enum ak4961_state {
 	AK4961_IDLE = 0,
 	AK4961_DSPRSTNON,
-};
-
-enum ak4961_slimbus_stream_state {
-	AK4961_SLIMBUS_STREAM_NA = 0,
-	AK4961_SLIMBUS_STREAM_OFF,
-	AK4961_SLIMBUS_STREAM_ON,
 };
 
 enum ak4961_pid_current {
@@ -67,16 +61,16 @@ enum ak49xx_codec_event {
 #define DSP_MODE_NARROW_HANDSET		1
 #define DSP_MODE_NARROW_HEADSET		2
 #define DSP_MODE_NARROW_HANDSFREE	3
-#define DSP_MODE_WIDE_HANDSET		4
-#define DSP_MODE_WIDE_HEADSET		5
-#define DSP_MODE_WIDE_HANDSFREE		6
-#define DSP_MODE_VOICE_RECOGNITION	7	// 3-MIC solution
-#define DSP_MODE_SOUND_RECORD		8
-#define DSP_MODE_MUSIC_SPEAKER		9
-#define DSP_MODE_BARGE_IN			10
-#define DSP_MODE_KARAOKE_HEAVY		11
-#define DSP_MODE_KARAOKE_LIGHT		12
-#define DSP_MODE_KARAOKE_MIDDLE		13
+#define DSP_MODE_BEX_HANDSET		4
+#define DSP_MODE_BEX_HEADSET		5
+#define DSP_MODE_BEX_HANDSFREE		6
+#define DSP_MODE_WIDE_HANDSET		7
+#define DSP_MODE_WIDE_HEADSET		8
+#define DSP_MODE_WIDE_HANDSFREE		9
+#define DSP_MODE_VOICE_RECOGNITION	10	// 3-MIC solution
+#define DSP_MODE_CAMERA_RECORD		11
+#define DSP_MODE_SOUND_RECORD		12
+#define DSP_MODE_MUSIC_SPEAKER		13
 
 /* Number of input and output Slimbus port */
 enum {

@@ -57,11 +57,7 @@
 
 		qcom,pon_1 {
 			qcom,pon-type = <0>;
-			qcom,support-reset = <1>;
 			qcom,pull-up = <1>;
-			qcom,s1-timer = <10256>;
-			qcom,s2-timer = <2000>;
-			qcom,s2-type = <1>;
 			linux,code = <116>;
 		};
 /* Removed by yfliu, for PWK
@@ -115,6 +111,9 @@
 		reg = <0x2800 0x100>;
 	};
 
+/*  ztemt BMS
+  *                 CONFIG_ZTEMT_NX504J_CHARGE
+*/
 	pm8941_bms: qcom,bms {
 		spmi-dev-container;
 		compatible = "qcom,qpnp-bms";
@@ -124,7 +123,8 @@
 
 		qcom,r-sense-uohm = <10000>;
 		qcom,v-cutoff-uv = <3400000>;
-		qcom,max-voltage-uv = <4200000>;
+		/*qcom,max-voltage-uv = <4200000>;*/
+		qcom,max-voltage-uv = <4350000>;
 		qcom,r-conn-mohm = <0>;
 		qcom,shutdown-soc-valid-limit = <100>;
 		qcom,adjust-soc-low-threshold = <15>;
@@ -135,7 +135,8 @@
 		qcom,low-soc-calculate-soc-ms = <5000>;
 		qcom,calculate-soc-ms = <20000>;
 		qcom,chg-term-ua = <100000>;
-		qcom,batt-type = <0>;
+		/*qcom,batt-type = <0>;*/
+		qcom,batt-type = <1>;
 		qcom,low-voltage-threshold = <3420000>;
 		qcom,tm-temp-margin = <5000>;
 		qcom,low-ocv-correction-limit-uv = <100>;
@@ -144,7 +145,7 @@
 		qcom,bms-vadc = <&pm8941_vadc>;
 		qcom,bms-iadc = <&pm8941_iadc>;
 		qcom,bms-adc_tm = <&pm8941_adc_tm>;
-
+        
 		qcom,batt-pres-status@1208 {
 			reg = <0x1208 0x1>;
 		};
@@ -193,6 +194,9 @@
 		qcom,cxo-freq = <19200000>;
 	};
 
+/* ztemt Charger 
+  *                 CONFIG_ZTEMT_NX504J_CHARGE
+*/
 	pm8941_chg: qcom,charger {
 		spmi-dev-container;
 		compatible = "qcom,qpnp-charger";
@@ -200,17 +204,22 @@
 		#size-cells = <1>;
 		status = "disabled";
 
-		qcom,vddmax-mv = <4200>;
-		qcom,vddsafe-mv = <4230>;
+		/*qcom,vddmax-mv = <4200>;*/
+		/*qcom,vddsafe-mv = <4230>;*/
+	 qcom,vddmax-mv = <4350>;
+		qcom,vddsafe-mv = <4360>;
+		
 		qcom,vinmin-mv = <4300>;
 		qcom,ibatmax-ma = <1500>;
 		qcom,ibatterm-ma = <100>;
 		qcom,ibatsafe-ma = <1500>;
 		qcom,thermal-mitigation = <1500 700 600 325>;
-		qcom,cool-bat-decidegc = <100>;
+    /*qcom,cool-bat-decidegc = <100>;*/
+		qcom,cool-bat-decidegc = <0>;
 		qcom,cool-bat-mv = <4100>;
 		qcom,ibatmax-warm-ma = <350>;
-		qcom,warm-bat-decidegc = <450>;
+	/*qcom,warm-bat-decidegc = <450>;*/
+	 qcom,warm-bat-decidegc = <999>;
 		qcom,warm-bat-mv = <4100>;
 		qcom,ibatmax-cool-ma = <350>;
 		qcom,vbatdet-delta-mv = <100>;
@@ -221,7 +230,11 @@
 		qcom,chg-adc_tm = <&pm8941_adc_tm>;
 		qcom,ibat-calibration-enabled;
 
-		pm8941_chg_chgr: qcom,chgr@1000 {
+/* ZTEMT Add*/
+			qcom,batt-hot-percentage = <25>;
+			qcom,batt-cold-percentage = <80>;
+			
+		qcom,chgr@1000 {
 			status = "disabled";
 			reg = <0x1000 0x100>;
 			interrupts =	<0x0 0x10 0x0>,
@@ -318,6 +331,13 @@
 		};
 	};
 
+    ztemt_hw_version{
+		spmi-dev-container;
+		compatible = "qcom,qpnp-ztemt_hw_version";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		status = "ok";	
+	};
 	pm8941_gpios: gpios {
 		spmi-dev-container;
 		compatible = "qcom,qpnp-pin";
@@ -839,6 +859,10 @@
 			label = "internal_rsense";
 			reg = <0>;
 			qcom,decimation = <0>;
+			qcom,pre-div-channel-scaling = <1>;
+			qcom,calibration-type = "absolute";
+			qcom,scale-function = <0>;
+			qcom,hw-settle-time = <0>;
 			qcom,fast-avg-setup = <0>;
 		};
 	};
@@ -1279,7 +1303,6 @@
 		label = "flash";
 		flash-boost-supply = <&pm8941_chg_boost>;
 		torch-boost-supply = <&pm8941_boost>;
-		flash-wa-supply = <&pm8941_chg_chgr>;
 	};
 
 	qcom,leds@d400 {

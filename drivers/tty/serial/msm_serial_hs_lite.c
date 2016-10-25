@@ -152,7 +152,7 @@ static const unsigned int regmap[][UARTDM_LAST] = {
 
 static struct of_device_id msm_hsl_match_table[] = {
 	{	.compatible = "qcom,msm-lsuart-v14",
-		.data = (void *)UARTDM_VERSION_14
+		.data = (void *)UARTDM_VERSION_14,
 	},
 	{}
 };
@@ -1839,6 +1839,10 @@ static int __devinit msm_serial_hsl_probe(struct platform_device *pdev)
 	ret = uart_add_one_port(&msm_hsl_uart_driver, port);
 	if (msm_hsl_port->pclk)
 		clk_disable_unprepare(msm_hsl_port->pclk);
+
+#ifdef CONFIG_ZTEMT_HSL_UART_DMEN_PATCH
+    msm_hsl_write(port, 0, regmap[msm_hsl_port->ver_id][UARTDM_DMEN]);
+#endif
 
 err:
 	return ret;

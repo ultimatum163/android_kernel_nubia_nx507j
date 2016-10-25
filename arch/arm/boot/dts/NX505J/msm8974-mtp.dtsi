@@ -26,9 +26,9 @@
 	};
 
 	qcom,mdss_dsi@fd922800 {
-		qcom,dsi-pref-prim-pan = <&dsi_sharp_r63417_1080_5p5_cmd>;
+		qcom,dsi-pref-prim-pan = <&dsi_sharp_r63417_1080_5p5>;
 	};
-
+	
 	qcom,mdss_dsi@fd922e00 {
 		status = "disabled";
 	};
@@ -39,21 +39,44 @@
 	};
 
 	qcom,hdmi_tx@fd922100 {
-		status = "disabled";
+		status = "ok";
 	};
 
-	i2c@f9924000 {
-                cyttsp4_i2c_adapter@24 {
-                        compatible = "cypress,cyttsp4_i2c_adapter";
-                        reg = <0x24>;
-                        interrupt-parent = <&msmgpio>;
-                        interrupts = <61 0x2>;
-                        vdd_ana-supply = <&pm8941_l18>;
-                        vcc_i2c-supply = <&pm8941_lvs1>;
-                        cypress,reset-gpio = <&msmgpio 60 0x00>;
-                        cypress,irq-gpio = <&msmgpio 61 0x00>;
-                };
+	switch-gpio {
+		compatible = "nubia,switch-gpio";
+		input-name = "switch-gpio";
+		gpios = <&msmgpio 54 0>;
+	};
 
+	i2c@f9923000 {
+		anx7808_i2c_adapter@72 {
+			status = "okay";
+			compatible = "slimport,anx7808_i2c_adapter";
+			reg = <0x72>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <27 0x3>;
+			anx7808-pdown-gpio = <&msmgpio 26 0x00>;
+			anx7808-reset-gpio = <&msmgpio 78 0x00>;
+			anx7808-int-gpio = <&msmgpio 102 0x00>;
+			anx7808-cbl-gpio = <&msmgpio 27 0x00>;
+			anx7808-v10-gpio = <&msmgpio 14 0x00>;
+			smps3a-supply = <&pm8941_s3>;
+			vreg_l18-supply = <&pm8941_l18>;
+		};
+	};
+	i2c@f9924000 {
+		/*ZTEMT Added by lixin, 2014/04/28*/
+		cyttsp4_i2c_adapter@24 {
+			compatible = "cypress,cyttsp4_i2c_adapter";
+			reg = <0x24>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <61 0x2>;
+			vdd_ana-supply = <&pm8941_l18>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+			cypress,reset-gpio = <&msmgpio 60 0x00>;
+			cypress,irq-gpio = <&msmgpio 61 0x00>;
+		};
+		
 		synaptics_dsx_i2c@22 {
 			compatible = "synaptics_dsx_i2c,rmi4";
 			reg = <0x22>;
@@ -70,8 +93,9 @@
 			synaptics,power_on_state = <1>;
 			synaptics,power_delay_ms = <160>;
 		};
-
-/*		synaptics@20 {
+		/*ZTEMT END*/
+/*
+		synaptics@20 {
 			compatible = "synaptics,rmi4";
 			reg = <0x20>;
 			interrupt-parent = <&msmgpio>;
@@ -179,7 +203,16 @@
 			broadcom,wake-gpio = <&msmgpio 13 0x00>;
 			broadcom,irq-gpio = <&msmgpio 59 0x01>;
 		};
+
+		tps65132@3e {
+			compatible = "tps,tps65132_i2c_adapter";
+			reg = <0x3e>;
+			interrupt-parent = <&msmgpio>;
+			vdd_ana-supply = <&pm8941_lvs1>;
+			vcc_i2c-supply = <&pm8941_lvs1>;
+		};
 	};
+
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
 		label = "atmel_mxt_ts";
@@ -219,20 +252,6 @@
 	                compatible = "ams,ams-sensor";
 	                interrupt-parent = <&msmgpio>;
 	                ams,irq-gpio = <&msmgpio 9 0x00>;
-	                ams,light-percent = <100>;
-
-	                //for tmg3993
-	                ams,prox-offset-cal-ability-tmg399x = <15>;
-	                ams,prox-led-plus-cnt-tmg399x = <4>;
-	                ams,gesture-offset-cal-ability-tmg399x = <35>;
-	                ams,gesture-led-plus-cnt-tmg399x = <4>;
-
-	                //for tmd2772
-	                ams,prox-offset-cal-ability-tmd2772 = <8>;
-	                ams,prox-led-plus-cnt-tmd2772 = <12>;
-
-	                vdd-supply = <&pm8941_l18>;
-                    vio-supply = <&pm8941_lvs1>;
 	        };
 
 	        maxq616_i2c_adapter@11 {
@@ -334,10 +353,10 @@
 			"MIC BIAS4 External", "Digital Mic6",
 			"Lineout_1 amp", "LINEOUT1";
 
+		qcom,hdmi-audio-rx;
 
 		qcom,ext-lineout1-amp-gpio = <&msmgpio 16 0>;
 		qcom,mbhc-switch-enable-gpio = <&msmgpio 96 0>;
-		qcom,us-euro-gpios = <&msmgpio 96 0>;
 		qcom,cdc-micbias2-headset-only;
 		qcom,mbhc-audio-jack-type = "4-pole-jack";
 	};
@@ -353,7 +372,7 @@
 			qcom,cs-out-en;
 			qcom,op-fdbck = <1>;
 			qcom,default-state = "on";
-			qcom,max-current = <25>;
+			qcom,max-current = <21>;
 			qcom,ctrl-delay-us = <0>;
 			qcom,boost-curr-lim = <5>;
 			qcom,cp-sel = <0>;
@@ -860,10 +879,7 @@
 	};
 };
 
-&dsi_sharp_r63417_1080_5p5_cmd {
-        qcom,cont-splash-enabled;
-};
 
-&dsi_sharp_r63417_1080_5p5_vid {
+&dsi_sharp_r63417_1080_5p5 {
         qcom,cont-splash-enabled;
 };

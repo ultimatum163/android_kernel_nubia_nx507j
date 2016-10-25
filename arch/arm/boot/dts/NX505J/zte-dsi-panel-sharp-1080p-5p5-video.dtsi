@@ -108,8 +108,6 @@
 		qcom,mdss-dsi-t-clk-pre = <0x1C>;
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = <255>;
-		qcom,mdss-dsi-bl-min-level_B = <3>;
-		qcom,mdss-dsi-bl-max-level_B = <227>;
 		mdss-dsi-hfp-power-mode;
 		mdss-dsi-hsa-power-mode;
 		mdss-dsi-hbp-power-mode;

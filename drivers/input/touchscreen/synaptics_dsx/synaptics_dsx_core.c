@@ -82,6 +82,8 @@
 #define NO_SLEEP_ON (1 << 2)
 #define CONFIGURED (1 << 7)
 
+#define ZTEMT_TP_WAKEUP_GESTURE_FUNCTION	1		//add by luochangyang
+
 static int synaptics_rmi4_f12_set_enables(struct synaptics_rmi4_data *rmi4_data,
 		unsigned short ctrl28);
 
@@ -107,10 +109,12 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h);
 #endif
 
 /*** ZTEMT Added by luochangyang, 2014/03/19 ***/
+#if ZTEMT_TP_WAKEUP_GESTURE_FUNCTION
 static ssize_t synaptics_wakeup_gesture_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t synaptics_wakeup_gesture_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
+#endif
 static ssize_t synaptics_rmi4_f01_reset_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 /***ZTEMT END***/
@@ -361,11 +365,13 @@ static struct device_attribute attrs[] = {
 	__ATTR(buildid, S_IRUGO,
 			synaptics_rmi4_f01_buildid_show,
 			synaptics_rmi4_store_error),
+#if ZTEMT_TP_WAKEUP_GESTURE_FUNCTION
     /*** ZTEMT Added by luochangyang, 2014/03/19 ***/
 	__ATTR(wakeup_gesture, 00664,
 			synaptics_wakeup_gesture_show,
 			synaptics_wakeup_gesture_store),
    	/***ZTEMT END***/
+#endif
 	__ATTR(flashprog, S_IRUGO,
 			synaptics_rmi4_f01_flashprog_show,
 			synaptics_rmi4_store_error),
@@ -475,12 +481,13 @@ static ssize_t synaptics_rmi4_f01_buildid_show(struct device *dev,
 }
 
 /*** ZTEMT Added by luochangyang, 2014/03/19 ***/
+#if ZTEMT_TP_WAKEUP_GESTURE_FUNCTION
 static ssize_t synaptics_wakeup_gesture_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
 	
-	return snprintf(buf, PAGE_SIZE, "0x%02X\n",	rmi4_data->wakeup_gesture);
+	return snprintf(buf, PAGE_SIZE, "%d\n", rmi4_data->wakeup_gesture);
 }
 
 static ssize_t synaptics_wakeup_gesture_store(struct device *dev,
@@ -494,19 +501,11 @@ static ssize_t synaptics_wakeup_gesture_store(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if (value > 0xFF && value < 0)
-		return -EINVAL;
-
-	if (value == 0xFF)
-		value = 0;
-
-	rmi4_data->wakeup_gesture = (u8)value;
-	
-	if (ret)
-		return ret;
+	rmi4_data->wakeup_gesture = (value != 0);
 
 	return size;
 }
+#endif
 /***ZTEMT END***/
 
 static ssize_t synaptics_rmi4_f01_flashprog_show(struct device *dev,
@@ -1203,22 +1202,22 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 			dev_dbg(rmi4_data->pdev->dev.parent, "%s: Have a palm.   %d_%d\n",	
 				__func__, fingers, fingers);
 #if ZTEMT_SYNAPTICS_DEBUG
-			input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
+			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 1);
 			input_sync(rmi4_data->input_dev);
 
-			input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
+			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 0);
 			input_sync(rmi4_data->input_dev);
 #else
 			/* For large area event */
 			input_mt_slot(rmi4_data->input_dev, 0);
-            		input_mt_report_slot_state(rmi4_data->input_dev, MT_TOOL_FINGER, true);
-            		input_report_abs(rmi4_data->input_dev, ABS_MT_PRESSURE, 1000);
-            		input_sync(rmi4_data->input_dev);
+            input_mt_report_slot_state(rmi4_data->input_dev, MT_TOOL_FINGER, true);
+            input_report_abs(rmi4_data->input_dev, ABS_MT_PRESSURE, 1000);
+            input_sync(rmi4_data->input_dev);
 
-            		/* Release all finger */
-       			for (fingers = 0; fingers < 10; fingers++) {
-       				input_mt_slot(rmi4_data->input_dev, fingers);
-        			input_mt_report_slot_state(rmi4_data->input_dev, MT_TOOL_FINGER, false);
+            /* Release all finger */
+        	for (fingers = 0; fingers < 10; fingers++) {
+        		input_mt_slot(rmi4_data->input_dev, fingers);
+        		input_mt_report_slot_state(rmi4_data->input_dev, MT_TOOL_FINGER, false);
         	}
             input_sync(rmi4_data->input_dev);
 #endif
@@ -1269,18 +1268,16 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data)
 #endif
 		{
 #if ZTEMT_SYNAPTICS_DEBUG
-			input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
+			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 1);
 			input_sync(rmi4_data->input_dev);
 
-			input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
+			input_report_key(rmi4_data->input_dev, KEY_WAKEUP, 0);
 			input_sync(rmi4_data->input_dev);
 #else
-			//input_report_key(rmi4_data->input_dev, KEY_F10, 1);
-			input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
+			input_report_key(rmi4_data->input_dev, KEY_F10, 1);
 			input_sync(rmi4_data->input_dev);
 
-			//input_report_key(rmi4_data->input_dev, KEY_F10, 0);
-			input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
+			input_report_key(rmi4_data->input_dev, KEY_F10, 0);
 			input_sync(rmi4_data->input_dev);
 #endif
 
@@ -2401,6 +2398,7 @@ static int synaptics_rmi4_set_input_dev(struct synaptics_rmi4_data *rmi4_data)
 #endif
 	/*luochangyang 2014/03/19*/	
     set_bit(KEY_POWER, rmi4_data->input_dev->keybit);
+    set_bit(KEY_WAKEUP, rmi4_data->input_dev->keybit);
     set_bit(KEY_F10, rmi4_data->input_dev->keybit);
 	/*luochangyang END*/
 
@@ -3383,7 +3381,7 @@ static int synaptics_rmi4_fb_notifier_callback(struct notifier_block *self,
 		container_of(self, struct synaptics_rmi4_data, fb_notif);
 
 	if (evdata && evdata->data && rmi4_data && 
-        rmi4_data->input_dev && event == FB_EVENT_BLANK) {
+        rmi4_data->input_dev && (event == FB_EVENT_BLANK)) {
 
 		blank = evdata->data;
 		if (*blank == FB_BLANK_UNBLANK) {

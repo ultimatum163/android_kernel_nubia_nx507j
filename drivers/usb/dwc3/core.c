@@ -116,32 +116,22 @@ void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
 	 * if it failed previously to operate in SS mode.
 	 */
 	reg |= DWC3_GCTL_U2RSTECN;
-	reg &= ~(DWC3_GCTL_SOFITPSYNC);
-	reg &= ~(DWC3_GCTL_PWRDNSCALEMASK);
-	reg |= DWC3_GCTL_PWRDNSCALE(2);
-	reg |= DWC3_GCTL_U2EXIT_LFPS;
-	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
-
-	if (mode == DWC3_GCTL_PRTCAP_OTG || mode == DWC3_GCTL_PRTCAP_HOST) {
+	if (mode == DWC3_GCTL_PRTCAP_HOST) {
 		/*
 		 * Allow ITP generated off of ref clk based counter instead
 		 * of UTMI/ULPI clk based counter, when superspeed only is
 		 * active so that UTMI/ULPI PHY can be suspened.
-		 *
-		 * Starting with revision 2.50A, GFLADJ_REFCLK_LPM_SEL is used
-		 * instead.
 		 */
-		if (dwc->revision < DWC3_REVISION_250A) {
-			reg = dwc3_readl(dwc->regs, DWC3_GCTL);
-			reg |= DWC3_GCTL_SOFITPSYNC;
-			dwc3_writel(dwc->regs, DWC3_GCTL, reg);
-		} else {
-			reg = dwc3_readl(dwc->regs, DWC3_GFLADJ);
-			reg |= DWC3_GFLADJ_REFCLK_LPM_SEL;
-			dwc3_writel(dwc->regs, DWC3_GFLADJ, reg);
-		}
+		reg |= DWC3_GCTL_SOFITPSYNC;
+		reg &= ~(DWC3_GCTL_PWRDNSCALEMASK);
+		reg |= DWC3_GCTL_PWRDNSCALE(2);
+	} else if (mode == DWC3_GCTL_PRTCAP_DEVICE) {
+		reg &= ~(DWC3_GCTL_PWRDNSCALEMASK);
+		reg |= DWC3_GCTL_PWRDNSCALE(2);
+		reg &= ~(DWC3_GCTL_SOFITPSYNC);
 	}
-
+	reg |= DWC3_GCTL_U2EXIT_LFPS;
+	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
 	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
 	reg |= DWC3_GUSB3PIPECTL_SUSPHY;
 	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
@@ -521,16 +511,10 @@ void dwc3_set_notifier(void (*notify)(struct dwc3 *, unsigned))
 }
 EXPORT_SYMBOL(dwc3_set_notifier);
 
-int dwc3_notify_event(struct dwc3 *dwc, unsigned event)
+void dwc3_notify_event(struct dwc3 *dwc, unsigned event)
 {
-	int ret = 0;
-
 	if (dwc->notify_event)
 		dwc->notify_event(dwc, event);
-	else
-		ret = -ENODEV;
-
-	return ret;
 }
 EXPORT_SYMBOL(dwc3_notify_event);
 
@@ -732,6 +716,8 @@ static int __devexit dwc3_remove(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
+	pm_runtime_disable(&pdev->dev);
+
 	dwc3_debugfs_exit(dwc);
 
 	switch (dwc->mode) {
@@ -752,9 +738,6 @@ static int __devexit dwc3_remove(struct platform_device *pdev)
 	}
 
 	dwc3_core_exit(dwc);
-
-	pm_runtime_put(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
 
 	return 0;
 }

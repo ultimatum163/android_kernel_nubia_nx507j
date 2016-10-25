@@ -553,22 +553,24 @@ static int complete_walk(struct nameidata *nd)
 
 static __always_inline void set_root(struct nameidata *nd)
 {
-	get_fs_root(current->fs, &nd->root);
+	if (!nd->root.mnt)
+		get_fs_root(current->fs, &nd->root);
 }
 
 static int link_path_walk(const char *, struct nameidata *);
 
-static __always_inline unsigned set_root_rcu(struct nameidata *nd)
+static __always_inline void set_root_rcu(struct nameidata *nd)
 {
-	struct fs_struct *fs = current->fs;
-	unsigned seq, res;
+	if (!nd->root.mnt) {
+		struct fs_struct *fs = current->fs;
+		unsigned seq;
 
-	do {
-		seq = read_seqcount_begin(&fs->seq);
-		nd->root = fs->root;
-		res = __read_seqcount_begin(&nd->root.dentry->d_seq);
-	} while (read_seqcount_retry(&fs->seq, seq));
-	return res;
+		do {
+			seq = read_seqcount_begin(&fs->seq);
+			nd->root = fs->root;
+			nd->seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
+		} while (read_seqcount_retry(&fs->seq, seq));
+	}
 }
 
 static __always_inline int __vfs_follow_link(struct nameidata *nd, const char *link)
@@ -579,8 +581,7 @@ static __always_inline int __vfs_follow_link(struct nameidata *nd, const char *l
 		goto fail;
 
 	if (*link == '/') {
-		if (!nd->root.mnt)
-			set_root(nd);
+		set_root(nd);
 		path_put(&nd->path);
 		nd->path = nd->root;
 		path_get(&nd->root);
@@ -937,8 +938,7 @@ static void follow_mount_rcu(struct nameidata *nd)
 
 static int follow_dotdot_rcu(struct nameidata *nd)
 {
-	if (!nd->root.mnt)
-		set_root_rcu(nd);
+	set_root_rcu(nd);
 
 	while (1) {
 		if (nd->path.dentry == nd->root.dentry &&
@@ -1041,8 +1041,7 @@ static void follow_mount(struct path *path)
 
 static void follow_dotdot(struct nameidata *nd)
 {
-	if (!nd->root.mnt)
-		set_root(nd);
+	set_root(nd);
 
 	while(1) {
 		struct dentry *old = nd->path.dentry;
@@ -1644,7 +1643,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 		if (flags & LOOKUP_RCU) {
 			br_read_lock(&vfsmount_lock);
 			rcu_read_lock();
-			nd->seq = set_root_rcu(nd);
+			set_root_rcu(nd);
 		} else {
 			set_root(nd);
 			path_get(&nd->root);
@@ -1799,9 +1798,27 @@ static int do_path_lookup(int dfd, const char *name,
 	return retval;
 }
 
-int kern_path_parent(const char *name, struct nameidata *nd)
+/* does lookup, returns the object with parent locked */
+struct dentry *kern_path_locked(const char *name, struct path *path)
 {
-	return do_path_lookup(AT_FDCWD, name, LOOKUP_PARENT, nd);
+	struct nameidata nd;
+	struct dentry *d;
+	int err = do_path_lookup(AT_FDCWD, name, LOOKUP_PARENT, &nd);
+	if (err)
+		return ERR_PTR(err);
+	if (nd.last_type != LAST_NORM) {
+		path_put(&nd.path);
+		return ERR_PTR(-EINVAL);
+	}
+	mutex_lock_nested(&nd.path.dentry->d_inode->i_mutex, I_MUTEX_PARENT);
+	d = lookup_one_len(nd.last.name, nd.path.dentry, nd.last.len);
+	if (IS_ERR(d)) {
+		mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+		path_put(&nd.path);
+		return d;
+	}
+	*path = nd.path;
+	return d;
 }
 
 int kern_path(const char *name, unsigned int flags, struct path *path)

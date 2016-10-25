@@ -198,7 +198,6 @@ static void cyttsp5_get_mt_touches(struct cyttsp5_mt_data *md,
 	struct cyttsp5_sysinfo *si = md->si;
 	int sig;
 	int i, j, t = 0;
-    u16 fw_ver_ic_temp = 0;
 	DECLARE_BITMAP(ids, MAX_TOUCH_NUMBER);
 	int mt_sync_count = 0;
 
@@ -228,24 +227,13 @@ static void cyttsp5_get_mt_touches(struct cyttsp5_mt_data *md,
 
 		/* Hall mode - filter some pointer */
 		if (md->hall_mode == 1) {
-            fw_ver_ic_temp = si->fw_ver_ic & 0xFFF0;
-            if (fw_ver_ic_temp == 0x05D0){
-                if (tch->abs[CY_TCH_Y] > 765) {
-                    dev_info(dev, "%s: HALL: filter some pointer.\n", __func__);
-                    continue;
-                }
-            }
-            else if (fw_ver_ic_temp == 0x0900 || fw_ver_ic_temp == 0x0A00 ){
-                if (tch->abs[CY_TCH_Y] > 1230) {
-                    dev_info(dev, "%s: HALL: filter some pointer.\n", __func__);
-                    continue;
-                }
-            }
-            else{
-                dev_info(dev, "%s: HALL: Don't filter this pointer.\n", __func__);
-            }
-        }
-        /***ZTEMT END***/
+			if (tch->abs[CY_TCH_Y] > 765) {
+    		    dev_info(dev, "%s: HALL: filter some pointer.\n", __func__);
+                
+				continue;
+		    }
+		}
+		/***ZTEMT END***/
 
 		if ((tch->abs[CY_TCH_T] < md->pdata->frmwrk->abs
 			[(CY_ABS_ID_OST * CY_NUM_ABS_SET) + CY_MIN_OST]) ||

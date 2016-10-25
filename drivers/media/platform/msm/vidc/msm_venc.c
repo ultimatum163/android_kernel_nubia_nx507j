@@ -931,6 +931,7 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 	rc = msm_comm_try_state(inst, MSM_VIDC_OPEN_DONE);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to open instance\n");
+		msm_comm_session_clean(inst);
 		return rc;
 	}
 
@@ -1102,21 +1103,20 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 			"Failed to move inst: %p to start done state\n", inst);
 		goto fail_start;
 	}
-	mutex_lock(&inst->sync_lock);
-	if (!list_empty(&inst->pendingq)) {
-		list_for_each_safe(ptr, next, &inst->pendingq) {
-			temp = list_entry(ptr, struct vb2_buf_entry, list);
-			rc = msm_comm_qbuf(temp->vb);
-			if (rc) {
-				dprintk(VIDC_ERR,
+
+	mutex_lock(&inst->pendingq.lock);
+	list_for_each_safe(ptr, next, &inst->pendingq.list) {
+		temp = list_entry(ptr, struct vb2_buf_entry, list);
+		rc = msm_comm_qbuf(temp->vb);
+		if (rc) {
+			dprintk(VIDC_ERR,
 					"Failed to qbuf to hardware\n");
-				break;
-			}
-			list_del(&temp->list);
-			kfree(temp);
+			break;
 		}
+		list_del(&temp->list);
+		kfree(temp);
 	}
-	mutex_unlock(&inst->sync_lock);
+	mutex_unlock(&inst->pendingq.lock);
 	return rc;
 fail_start:
 	return rc;
@@ -2571,7 +2571,7 @@ int msm_venc_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 
 	if ((fps % 15 == 14) || (fps % 24 == 23))
 		fps = fps + 1;
-	else if ((fps % 24 == 1) || (fps % 15 == 1))
+	else if ((fps > 1) && ((fps % 24 == 1) || (fps % 15 == 1)))
 		fps = fps - 1;
 
 	if (inst->prop.fps != fps) {
@@ -2703,6 +2703,7 @@ int msm_venc_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			rc = msm_comm_try_state(inst, MSM_VIDC_OPEN_DONE);
 			if (rc) {
 				dprintk(VIDC_ERR, "Failed to open instance\n");
+                                msm_comm_session_clean(inst);
 				goto exit;
 			}
 			frame_sz.width = inst->prop.width[CAPTURE_PORT];
@@ -2776,16 +2777,8 @@ int msm_venc_g_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 				buff_req_buffer->buffer_size : 0;
 		}
 		for (i = 0; i < fmt->num_planes; ++i) {
-			if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-				inst->bufq[OUTPUT_PORT].vb2_bufq.
-				plane_sizes[i] =
-				f->fmt.pix_mp.plane_fmt[i].sizeimage;
-			} else if (f->type ==
-				V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-				inst->bufq[CAPTURE_PORT].vb2_bufq.
-				plane_sizes[i] =
-				f->fmt.pix_mp.plane_fmt[i].sizeimage;
-			}
+			inst->bufq[CAPTURE_PORT].vb2_bufq.plane_sizes[i] =
+			f->fmt.pix_mp.plane_fmt[i].sizeimage;
 		}
 	} else {
 		dprintk(VIDC_ERR,

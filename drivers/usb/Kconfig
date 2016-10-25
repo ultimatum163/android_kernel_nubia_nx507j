@@ -133,10 +133,9 @@ config ZTEMT_USB
 config ZTEMT_USB_DEBUG
 	boolean "Support for ZTEMT USB DEBUG info"
 	depends on USB
-	default n
+	default y
 	help
 	  Use ZTEMT USB driver debug info.
-
 source "drivers/usb/core/Kconfig"
 
 source "drivers/usb/dwc3/Kconfig"

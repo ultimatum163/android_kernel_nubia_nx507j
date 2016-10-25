@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,13 +13,45 @@
 #ifndef __MFD_AK49XX_CORE_H__
 #define __MFD_AK49XX_CORE_H__
 
-#include <linux/types.h>
+#include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/of_irq.h>
-#include <linux/pinctrl/consumer.h>
-#include <linux/mfd/ak49xx/core-resource.h>
+
+#define AK49XX_NUM_IRQ_REGS 1
 
 #define AK49XX_SLIM_STATUS_REG 4
+
+#define AK49XX_INTERFACE_TYPE_SLIMBUS	0x00
+#define AK49XX_INTERFACE_TYPE_I2C	0x01
+#define AK49XX_INTERFACE_TYPE_SPI	0x02
+
+enum {
+	CODEC_AK4960_ID = 0,
+	CODEC_AK4961_ID,
+	CODEC_AK4962_ID,
+};
+
+enum {
+	AK4960_IRQ_RCE = 0,
+	AK4960_IRQ_JDE,
+	AK4960_NUM_IRQS,
+};
+
+enum {
+	AK4961_IRQ_RCE = 0,
+	AK4961_IRQ_JDE,
+	AK4961_IRQ_VAD,
+	AK4961_NUM_IRQS,
+};
+
+#define MAX(X, Y) (((int)X) >= ((int)Y) ? (X) : (Y))
+#define AK49XX_MAX_NUM_IRQS MAX(AK4960_NUM_IRQS, AK4961_NUM_IRQS)
+
+enum ak49xx_pm_state {
+	AK49XX_PM_SLEEPABLE,
+	AK49XX_PM_AWAKE,
+	AK49XX_PM_ASLEEP,
+};
 
 /*
  * data structure for SLIMbus and I2S channel.
@@ -50,7 +82,6 @@ struct ak49xx_codec_dai_data {
 	u16 grph;				/* SLIMbus group handle */
 	unsigned long ch_mask;
 	wait_queue_head_t dai_wait;
-	bool bus_down_in_recovery;
 };
 
 #define AK49XX_CH(xport, xshift) \
@@ -62,10 +93,10 @@ struct ak49xx {
 	struct slim_device *slim_slave;
 	struct mutex io_lock;
 	struct mutex xfer_lock;
+	struct mutex irq_lock;
 	u8 version;
 
 	int reset_gpio;
-	int cif1_gpio;
 
 	int (*read_dev)(struct ak49xx *ak49xx, unsigned short reg,
 			int bytes, void *dest, bool interface_reg);
@@ -75,33 +106,60 @@ struct ak49xx {
 	int (*post_reset)(struct ak49xx *ak49xx);
 
 	void *ssr_priv;
-	bool slim_device_bootup;
 
 	u32 num_of_supplies;
 	struct regulator_bulk_data *supplies;
 
-	struct ak49xx_core_resource core_res;
+	enum ak49xx_pm_state pm_state;
+	struct mutex pm_lock;
+	/* pm_wq notifies change of pm_state */
+	wait_queue_head_t pm_wq;
+	int wlock_holders;
 
+	unsigned int irq_base;
+	unsigned int irq;
+	u8 irq_masks_cur[AK49XX_NUM_IRQ_REGS];
+	u8 irq_masks_cache[AK49XX_NUM_IRQ_REGS];
+	u8 irq_level[AK49XX_MAX_NUM_IRQS];
 	/* Slimbus or I2S port */
 	u32 num_rx_port;
 	u32 num_tx_port;
 	struct ak49xx_ch *rx_chs;
 	struct ak49xx_ch *tx_chs;
 	u32 mclk_rate;
-	u16 use_pinctrl;
 
 	u8 codec_id;
 };
 
+int ak49xx_reg_read(struct ak49xx *ak49xx, unsigned short reg);
+int ak49xx_reg_write(struct ak49xx *ak49xx, unsigned short reg,
+		u8 val);
 int ak49xx_interface_reg_read(struct ak49xx *ak49xx, unsigned short reg);
 int ak49xx_interface_reg_write(struct ak49xx *ak49xx, unsigned short reg,
 		u8 val);
-int ak49xx_get_logical_addresses(u8 *pgd_la, u8 *inf_la);
-
+int ak49xx_bulk_read(struct ak49xx *ak49xx, unsigned short reg,
+			int count, u8 *buf);
+int ak49xx_bulk_write(struct ak49xx *ak49xx, unsigned short reg,
+			int count, u8 *buf);
 int ak49xx_ram_write(struct ak49xx *ak49xx, u8 vat, u8 page,
 			u16 start, int count, u8 *buf);
 int ak49xx_run_ram_write(struct ak49xx *ak49xx, u8 *buf);
+int ak49xx_irq_init(struct ak49xx *ak49xx);
+void ak49xx_irq_exit(struct ak49xx *ak49xx);
+int ak49xx_get_logical_addresses(u8 *pgd_la, u8 *inf_la);
+int ak49xx_get_intf_type(void);
 
+enum ak49xx_pm_state ak49xx_pm_cmpxchg(struct ak49xx *ak49xx,
+				enum ak49xx_pm_state o,
+				enum ak49xx_pm_state n);
+
+int ak49xx_request_irq(struct ak49xx *ak49xx, int irq,
+				     irq_handler_t handler, const char *name, void *data);
+
+void ak49xx_free_irq(struct ak49xx *ak49xx, int irq, void *data);
+void ak49xx_enable_irq(struct ak49xx *ak49xx, int irq);
+void ak49xx_disable_irq(struct ak49xx *ak49xx, int irq);
+void ak49xx_disable_irq_sync(struct ak49xx *ak49xx, int irq);
 #if defined(CONFIG_AK4960_CODEC) || \
 	defined(CONFIG_AK4961_CODEC) || \
 	defined(CONFIG_AK4962_CODEC)

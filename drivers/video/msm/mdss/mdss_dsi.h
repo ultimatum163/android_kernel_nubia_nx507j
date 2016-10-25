@@ -239,7 +239,7 @@ enum {
 
 #define DSI_EV_PLL_UNLOCKED		0x0001
 #define DSI_EV_MDP_FIFO_UNDERFLOW	0x0002
-#define DSI_EV_DSI_FIFO_EMPTY		0x0003
+#define DSI_EV_DSI_FIFO_EMPTY		0x0004
 #define DSI_EV_MDP_BUSY_RELEASE		0x80000000
 
 struct mdss_dsi_ctrl_pdata {
@@ -279,7 +279,7 @@ struct mdss_dsi_ctrl_pdata {
 	int mode_gpio;
 	int disp_te_gpio_requested;
 	int bklt_ctrl;	/* backlight ctrl */
-	u8  bklt_ctrl_dcs_reg;
+    u8  bklt_ctrl_dcs_reg;
 	int pwm_period;
 	int pwm_pmic_gpio;
 	int pwm_lpg_chan;
@@ -297,7 +297,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct mdss_panel_recovery *recovery;
 
 	struct dsi_panel_cmds on_cmds;
-	
+
 #ifdef CONFIG_ZTEMT_LCD_DISP_ENHANCE
 /*add init code second part,mayu add 3.5*/
 	struct dsi_panel_cmds on_second_cmds;

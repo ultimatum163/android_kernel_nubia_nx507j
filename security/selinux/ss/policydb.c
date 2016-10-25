@@ -149,7 +149,7 @@ static struct policydb_compat_info policydb_compat[] = {
 		.ocon_num	= OCON_NUM,
 	},
 	{
-		.version	= POLICYDB_VERSION_IOCTL_OPERATIONS,
+		.version	= POLICYDB_VERSION_XPERMS_IOCTL,
 		.sym_num	= SYM_NUM,
 		.ocon_num	= OCON_NUM,
 	},
@@ -2000,19 +2000,7 @@ static int filename_trans_read(struct policydb *p, void *fp)
 		if (rc)
 			goto out;
 
-		rc = hashtab_insert(p->filename_trans, ft, otype);
-		if (rc) {
-			/*
-			 * Do not return -EEXIST to the caller, or the system
-			 * will not boot.
-			 */
-			if (rc != -EEXIST)
-				goto out;
-			/* But free memory to avoid memory leak. */
-			kfree(ft);
-			kfree(name);
-			kfree(otype);
-		}
+		hashtab_insert(p->filename_trans, ft, otype);
 	}
 	hash_eval(p->filename_trans, "filenametr");
 	return 0;
@@ -2610,7 +2598,7 @@ static int mls_write_range_helper(struct mls_range *r, void *fp)
 	if (!eq)
 		buf[2] = cpu_to_le32(r->level[1].sens);
 
-	BUG_ON(items > ARRAY_SIZE(buf));
+	BUG_ON(items > (sizeof(buf)/sizeof(buf[0])));
 
 	rc = put_entry(buf, sizeof(u32), items, fp);
 	if (rc)
@@ -2992,7 +2980,7 @@ static int role_write(void *vkey, void *datum, void *ptr)
 	if (p->policyvers >= POLICYDB_VERSION_BOUNDARY)
 		buf[items++] = cpu_to_le32(role->bounds);
 
-	BUG_ON(items > ARRAY_SIZE(buf));
+	BUG_ON(items > (sizeof(buf)/sizeof(buf[0])));
 
 	rc = put_entry(buf, sizeof(u32), items, fp);
 	if (rc)
@@ -3042,7 +3030,7 @@ static int type_write(void *vkey, void *datum, void *ptr)
 	} else {
 		buf[items++] = cpu_to_le32(typdatum->primary);
 	}
-	BUG_ON(items > ARRAY_SIZE(buf));
+	BUG_ON(items > (sizeof(buf) / sizeof(buf[0])));
 	rc = put_entry(buf, sizeof(u32), items, fp);
 	if (rc)
 		return rc;
@@ -3071,7 +3059,7 @@ static int user_write(void *vkey, void *datum, void *ptr)
 	buf[items++] = cpu_to_le32(usrdatum->value);
 	if (p->policyvers >= POLICYDB_VERSION_BOUNDARY)
 		buf[items++] = cpu_to_le32(usrdatum->bounds);
-	BUG_ON(items > ARRAY_SIZE(buf));
+	BUG_ON(items > (sizeof(buf) / sizeof(buf[0])));
 	rc = put_entry(buf, sizeof(u32), items, fp);
 	if (rc)
 		return rc;
@@ -3341,10 +3329,10 @@ static int filename_write_helper(void *key, void *data, void *ptr)
 	if (rc)
 		return rc;
 
-	buf[0] = cpu_to_le32(ft->stype);
-	buf[1] = cpu_to_le32(ft->ttype);
-	buf[2] = cpu_to_le32(ft->tclass);
-	buf[3] = cpu_to_le32(otype->otype);
+	buf[0] = ft->stype;
+	buf[1] = ft->ttype;
+	buf[2] = ft->tclass;
+	buf[3] = otype->otype;
 
 	rc = put_entry(buf, sizeof(u32), 4, fp);
 	if (rc)

@@ -767,7 +767,7 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		}
 		ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_INIT;
 	}
-
+	
 #ifdef CONFIG_ZTEMT_LCD_DISP_ENHANCE
 	/*add init code second part,mayu add 3.5*/
 	pr_debug("%s:\n", __func__);
@@ -1556,7 +1556,7 @@ int dsi_panel_device_register(struct device_node *pan_node,
 			return -ENODEV;
 		}
 	}
-#endif	
+#endif
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 

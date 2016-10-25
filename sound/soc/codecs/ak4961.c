@@ -32,12 +32,10 @@
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
-#include <linux/timer.h>
 #include "ak4961.h"
 
-#define AK4961_NUM_PRAM			7
-#define AK4961_NUM_CRAM			13
-#define AK4961_NUM_ORAM			4
+#define AK4961_NUM_PRAM			5
+#define AK4961_NUM_CRAM			12
 
 static struct afe_param_slimbus_slave_port_cfg ak4961_slimbus_slave_port_cfg = {
 	.minor_version = 1,
@@ -54,32 +52,22 @@ static const char *AK4961_PRAM_FIRMWARES[] = {
 	"ak4961_pram_wide.bin",
 	"ak4961_pram_voice_recognition.bin",
 	"ak4961_pram_sound_record.bin",
-	"ak4961_pram_music_speaker.bin",
-	"ak4961_pram_barge_in.bin",
-	"ak4961_pram_karaoke.bin"
+	"ak4961_pram_music_speaker.bin"
 };
 
 static const char *AK4961_CRAM_FIRMWARES[] = {
-	"ak4961_cram_null.bin",
 	"ak4961_cram_narrow_hs.bin",
 	"ak4961_cram_narrow_hp.bin",
 	"ak4961_cram_narrow_hf.bin",
+	"ak4961_cram_bex_hs.bin",
+	"ak4961_cram_bex_hp.bin",
+	"ak4961_cram_bex_hf.bin",
 	"ak4961_cram_wide_hs.bin",
 	"ak4961_cram_wide_hp.bin",
 	"ak4961_cram_wide_hf.bin",
 	"ak4961_cram_voice_recognition.bin",
 	"ak4961_cram_sound_record.bin",
-	"ak4961_cram_music_speaker.bin",
-	"ak4961_cram_karaoke_heavy.bin",
-	"ak4961_cram_karaoke_light.bin",
-	"ak4961_cram_karaoke_middle.bin"
-};
-
-static const char *AK4961_ORAM_FIRMWARES[] = {
-	"ak4961_oram_null.bin",
-	"ak4961_oram_karaoke_heavy.bin",
-	"ak4961_oram_karaoke_light.bin",
-	"ak4961_oram_karaoke_middle.bin"
+	"ak4961_cram_music_speaker.bin"
 };
 
 #define CONFIG_DEBUG_FS_CODEC
@@ -94,8 +82,7 @@ static const char *AK4961_ORAM_FIRMWARES[] = {
 
 #define BITS_PER_REG 8
 
-#define SLIM_CLOSE_TIMEOUT	1000
-#define SRC_RESET_TIMEOUT	600000	// msecs
+#define SLIM_CLOSE_TIMEOUT 1000
 
 #define AK4961_JACK_MASK (SND_JACK_HEADSET | SND_JACK_OC_HPHL | \
 			 SND_JACK_OC_HPHR | SND_JACK_UNSUPPORTED)
@@ -178,8 +165,6 @@ static const u32 vport_check_table[NUM_CODEC_DAIS] = {
 static const u32 vport_i2s_check_table[NUM_CODEC_DAIS] = {
 	0, /* SB1_PB */
 	0, /* SB1_CAP */
-	0, /* SB2_PB */
-	0, /* SB2_CAP */
 };
 
 struct ak4961_priv {
@@ -187,7 +172,6 @@ struct ak4961_priv {
 	struct workqueue_struct *workqueue;
 	struct work_struct work;
 	enum   ak4961_state state;
-	enum   ak4961_slimbus_stream_state stream_state;
 
 	struct snd_soc_codec *codec;
 
@@ -205,16 +189,12 @@ struct ak4961_priv {
 
 	const struct firmware *pram_firmware[AK4961_NUM_PRAM];
 	const struct firmware *cram_firmware[AK4961_NUM_CRAM];
-	const struct firmware *oram_firmware[AK4961_NUM_ORAM];
 
 	u8 pram_load_index;
 	u8 cram_load_index;
-	u8 oram_load_index;
 
 	int (*machine_codec_event_cb)(struct snd_soc_codec *codec,
 			enum ak49xx_codec_event);
-
-	struct timer_list timer;
 };
 
 #ifdef CONFIG_DEBUG_FS_CODEC
@@ -227,7 +207,7 @@ static ssize_t reg_data_show(struct device *dev,
 	int rx[192];
 
 	for (i = 0; i < VIRTUAL_ADDRESS_CONTROL; i++) {
-		ret = ak49xx_reg_read(&debugak49xx->core_res, i);
+		ret = ak49xx_reg_read(debugak49xx, i);
 
 		if (ret < 0) {
 			pr_err("%s: read register error.\n", __func__);
@@ -239,7 +219,7 @@ static ssize_t reg_data_show(struct device *dev,
 	}
 
 	for (j = CRC_RESULT_H8; j < MIR1_REGISTER_1; i++, j++) {
-		ret = ak49xx_reg_read(&debugak49xx->core_res, j);
+		ret = ak49xx_reg_read(debugak49xx, j);
 
 		if (ret < 0) {
 			pr_err("%s: read register error.\n", __func__);
@@ -251,7 +231,7 @@ static ssize_t reg_data_show(struct device *dev,
 	}
 
 	for (j = VAD_SETTING_1; j <= CREG7_SETTING; i++, j++) {
-		ret = ak49xx_reg_read(&debugak49xx->core_res, j);
+		ret = ak49xx_reg_read(debugak49xx, j);
 
 		if (ret < 0) {
 			pr_err("%s: read register error.\n", __func__);
@@ -316,7 +296,7 @@ static ssize_t reg_data_store(struct device *dev,
 	}
 
 	for (i = 0; i < pt_count; i+=2) {
-		ak49xx_reg_write(&debugak49xx->core_res, val[i], val[i+1]);
+		ak49xx_reg_write(debugak49xx, val[i], val[i+1]);
 		pr_debug("%s: write add=%d, val=%d.\n", __func__, val[i], val[i+1]);
 	}
 
@@ -425,9 +405,8 @@ static ssize_t ram_load_store(struct device *dev,
 	}
 
 	ret += ak49xx_ram_write(debugak49xx, vat, page, start, pt_count, val);
-	if (ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SPI ||
-		ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
-		ret += ak49xx_bulk_read(&debugak49xx->core_res, CRC_RESULT_H8, 2, buf_val);
+	if (ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SPI) {
+		ret += ak49xx_bulk_read(debugak49xx, CRC_RESULT_H8, 2, buf_val);
 		last_crc = (buf_val[0] << 8) + buf_val[1];
 	} else if (ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 		if (ret == 0) {
@@ -454,7 +433,7 @@ static ssize_t mir_data_show(struct device *dev,
 
 	for (i = 0; i < 16; i++) {
 
-		ret = ak49xx_reg_read(&debugak49xx->core_res, MIR1_REGISTER_1 + i);
+		ret = ak49xx_reg_read(debugak49xx, MIR1_REGISTER_1 + i);
 
 		if (ret < 0) {
 			pr_err("%s: read register error.\n", __func__);
@@ -506,22 +485,6 @@ static void ak4961_work(struct work_struct *work)
 	default:
 		break;
 	}
-
-	if (ak4961->stream_state != AK4961_SLIMBUS_STREAM_NA) {
-
-		if (snd_soc_read(codec, JACK_DETECTION_STATUS) & 0x02) { // JDS == 1
-
-			if (ak4961->stream_state == AK4961_SLIMBUS_STREAM_OFF) {
-				snd_soc_update_bits(codec, POWER_MANAGEMENT_9, 0x03, 0x00);	// HP Off
-			}
-
-			if (ak4961->stream_state == AK4961_SLIMBUS_STREAM_ON) {
-				if (snd_soc_read(codec, POWER_MANAGEMENT_8) & 0x01) { // PMDA1 == 1
-					snd_soc_update_bits(codec, POWER_MANAGEMENT_9, 0x03, 0x03);	// HP On
-				}
-			}
-		}
-	}
 	mutex_unlock(&ak4961->mutex);
 }
 
@@ -560,8 +523,7 @@ static void ak4961_shutdown(struct snd_pcm_substream *substream,
 
 	pr_debug("%s(): substream = %s  stream = %d\n" , __func__,
 		 substream->name, substream->stream);
-	if (ak4961->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS &&
-		ak4961->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS_SPI)
+	if (ak4961->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS)
 		return;
 
 	if ((ak4961_core != NULL) &&
@@ -766,8 +728,7 @@ static int ak4961_set_channel_map(struct snd_soc_dai *dai,
 		 __func__, dai->name, dai->id, tx_num, rx_num,
 		 ak4961->intf_type);
 
-	if (ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS ||
-		ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI)
+	if (ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS)
 		ak49xx_init_slimslave(core, core->slim->laddr,
 				       tx_num, tx_slot, rx_num, rx_slot);
 	return 0;
@@ -787,30 +748,28 @@ static int ak4961_get_channel_map(struct snd_soc_dai *dai,
 	case SB2_PB:
 	case SB3_PB:
 		if (!rx_slot || !rx_num) {
-			pr_err("%s: Invalid rx_slot %p or rx_num %p\n",
-				 __func__, rx_slot, rx_num);
+			pr_err("%s: Invalid rx_slot %d or rx_num %d\n",
+				 __func__, (u32) rx_slot, (u32) rx_num);
 			return -EINVAL;
 		}
 		list_for_each_entry(ch, &ak4961_p->dai[dai->id].ak49xx_ch_list,
 				    list) {
 			rx_slot[i++] = ch->ch_num;
 		}
-		pr_debug("%s: rx_num %d\n", __func__, i);
 		*rx_num = i;
 		break;
 	case SB1_CAP:
 	case SB2_CAP:
 	case SB3_CAP:
 		if (!tx_slot || !tx_num) {
-			pr_err("%s: Invalid tx_slot %p or tx_num %p\n",
-				 __func__, tx_slot, tx_num);
+			pr_err("%s: Invalid tx_slot %d or tx_num %d\n",
+				 __func__, (u32) tx_slot, (u32) tx_num);
 			return -EINVAL;
 		}
 		list_for_each_entry(ch, &ak4961_p->dai[dai->id].ak49xx_ch_list,
 				    list) {
 			tx_slot[i++] = ch->ch_num;
 		}
-		pr_debug("%s: tx_num %d\n", __func__, i);
 		*tx_num = i;
 		break;
 
@@ -835,14 +794,11 @@ static int ak4961_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-//		ak4961->stream_state = AK4961_SLIMBUS_STREAM_ON;
 		queue_work(ak4961->workqueue, &ak4961->work);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-//		ak4961->stream_state = AK4961_SLIMBUS_STREAM_OFF;
-		queue_work(ak4961->workqueue, &ak4961->work);
 		break;
 	default:
 		ret = -EINVAL;
@@ -973,19 +929,19 @@ static void ak4961_i2s_shutdown(struct snd_pcm_substream *substream,
 	switch (dai->id) {
 	case AIF_PORT1:
 		snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x10, 0x00);
-//		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR1, 0x70, 0x00);
+		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR1, 0x70, 0x00);
 		break;
 	case AIF_PORT2:
 		snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x20, 0x00);
-//		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR1, 0x07, 0x00);
+		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR1, 0x07, 0x00);
 		break;
 	case AIF_PORT3:
 		snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x40, 0x00);
-//		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR2, 0x70, 0x00);
+		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR2, 0x70, 0x00);
 		break;
 	case AIF_PORT4:
 		snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x80, 0x00);
-//		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR2, 0x07, 0x00);
+		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR2, 0x07, 0x00);
 		break;
 	default:
 		pr_err("%s: Invalid dai id %d\n", __func__, dai->id);
@@ -1076,18 +1032,20 @@ static int ak4961_i2s_hw_params(struct snd_pcm_substream *substream,
 		snd_soc_update_bits(codec, MSYNC1_BDV, 0xFF, BDV);
 		snd_soc_update_bits(codec, MSYNC1_SDV, 0xFF, SDV);
 		snd_soc_update_bits(codec, SDTO1_AIF_FORMAT, 0x07, DLC);
-		snd_soc_update_bits(codec, CODEC_AIF_FORMAT, 0x07, DLC);
 		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR1, 0x70, 0x10);
 		snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x10, 0x10);
 		snd_soc_update_bits(codec, CLOCK_MODE_SELECT, 0xFF, CMF);
 		snd_soc_update_bits(codec, JITTER_CLEANER_SETTING_1, 0xFF, CMF);
 		break;
 	case AIF_PORT2:
+		snd_soc_update_bits(codec, CDCMCLK_DIVIDER, 0xFF, MDV);
 		snd_soc_update_bits(codec, MSYNC2_BDV, 0xFF, BDV);
 		snd_soc_update_bits(codec, MSYNC2_SDV, 0xFF, SDV);
 		snd_soc_update_bits(codec, SDTO2_AIF_FORMAT, 0x07, DLC);
 		snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR1, 0x07, 0x02);
 		snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x20, 0x20);
+		snd_soc_update_bits(codec, CLOCK_MODE_SELECT, 0xFF, CMF);
+		snd_soc_update_bits(codec, JITTER_CLEANER_SETTING_1, 0xFF, CMF);
 		break;
 	case AIF_PORT3:
 		snd_soc_update_bits(codec, MSYNC3_BDV, 0xFF, BDV);
@@ -1525,25 +1483,22 @@ static const struct soc_enum port3_sync_domain =
 static const struct soc_enum port4_sync_domain =
 	SOC_ENUM_SINGLE(SYNC_DOMAIN_SELECTOR2, 0, 8, sync_domain_text);
 
+
 static const char *dsp_mode_text[] = {
 	"off",
 	"narrow_handset", "narrow_headset", "narrow_handsfree",
+	"bex_handset", "bex_headset", "bex_handsfree",
 	"wide_handset", "wide_headset", "wide_handsfree",
-	"voice_recognition",
-	"sound_record",
-	"music_speaker",
-	"barge_in",
-	"karaoke_heavy", "karaoke_light", "karaoke_middle"
+	"voice_recognition", "sound_record", "music_speaker"
 };
 
-static const u16 ram_table[] = {
-	0x010, 0x020, 0x030,	// NARROW_MODE
-	0x140, 0x150, 0x160,	// WIDE_MODE
-	0x270,					// Voice Recognition
-	0x380,					// Sound Record
-	0x490,					// Music Speaker
-	0x500,					// Barge-in
-	0x6A1, 0x6B2, 0x6C3		// Karaoke
+static const u8 ram_table[] = {
+	0x00, 0x01, 0x02,	// NARROW_MODE
+	0x03, 0x04, 0x05,	// BEX_MODE
+	0x16, 0x17, 0x18,	// WIDE_MODE
+	0x29,				// Voice Recognition
+	0x3A,				// Sound Record
+	0x4B				// Music Speaker
 };
 
 static const struct soc_enum dsp_mode_enum[] = {
@@ -1562,58 +1517,40 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct ak4961_priv *ak4961 = snd_soc_codec_get_drvdata(codec);
-	struct ak49xx *ak49xx = codec->control_data;
-	struct ak49xx_core_resource *core_res = &ak49xx->core_res;
 	int new_dsp_mode = ucontrol->value.integer.value[0];
 	int interface = ak49xx_get_intf_type();
 	int ret = 0;
-	int dsp_sync_domain = 0;
-
 	u8  pram_index, cram_index, ex_pram_index, ex_cram_index;
-	u8	oram_index, ex_oram_index;
-	size_t pram_size = 0, cram_size = 0, oram_size = 0;
+	size_t pram_size = 0, cram_size = 0;
 	u8	crc[2];
-	u8 *pram_fwbuf = 0, *cram_fwbuf = 0, *oram_fwbuf = 0;
+	u8 *pram_fwbuf = 0, *cram_fwbuf = 0;
 
 	if (ak4961_dsp_mode == new_dsp_mode) {
 		return 0;
 	}
-	
-	
 
 	if (new_dsp_mode != DSP_MODE_OFF) {
 
-		pram_index = ram_table[new_dsp_mode - 1] >> 8;
-		cram_index = (ram_table[new_dsp_mode - 1] >> 4) % 0x10;
-		oram_index = ram_table[new_dsp_mode - 1] % 0x10;
-		pr_debug("%s: pram_index = %d, cram_index =%d, oram_index = %d\n",
-				__func__, pram_index, cram_index, oram_index);
+		pram_index = ram_table[new_dsp_mode - 1] >> 4;
+		cram_index = ram_table[new_dsp_mode - 1] % 0x10;
 
 		if (ak4961_dsp_mode != DSP_MODE_OFF) {
 
-			ex_pram_index = ram_table[ak4961_dsp_mode - 1] >> 8;
-			ex_cram_index = (ram_table[ak4961_dsp_mode - 1] >> 4) % 0x10;
-			ex_oram_index = ram_table[ak4961_dsp_mode - 1] % 0x10;
-
-			dsp_sync_domain = snd_soc_read(codec, SYNC_DOMAIN_SELECTOR5);
-			if (dsp_sync_domain & 0x07) {
-				snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR5, 0x07, 0x00);
-				usleep_range(16000, 16000);
-			}
+			ex_pram_index = ram_table[ak4961_dsp_mode - 1] >> 4;
+			ex_cram_index = ram_table[ak4961_dsp_mode - 1] % 0x10;
 
 			snd_soc_update_bits(codec, FLOW_CONTROL_3, 0x01, 0x00);
 			snd_soc_update_bits(codec, FLOW_CONTROL_2, 0x01, 0x01);
 
 		} else {
-			ex_pram_index = ex_cram_index = ex_oram_index = 0xff;
+			ex_pram_index = ex_cram_index = 0xff;
 
 			snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x01, 0x01);
 			snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x03, 0x03);
 			snd_soc_update_bits(codec, FLOW_CONTROL_2, 0x01, 0x01);
 		}
 
-		if (pram_index != ex_pram_index &&
-				ak4961->pram_firmware[pram_index] != NULL) {
+		if (pram_index != ex_pram_index) {
 
 			pram_fwbuf = kmemdup(ak4961->pram_firmware[pram_index]->data,
 					ak4961->pram_firmware[pram_index]->size, GFP_KERNEL);
@@ -1624,16 +1561,14 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 
 			if (interface == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 				pram_size = ak4961->pram_firmware[pram_index]->size;
-			} else if (interface == AK49XX_INTERFACE_TYPE_SPI ||
-					   interface == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+			} else if (interface == AK49XX_INTERFACE_TYPE_SPI) {
 				pram_size = ak4961->pram_firmware[pram_index]->size - 2;
 			}
 		} else {
 			pram_fwbuf = 0;
 		}
 
-		if (cram_index != ex_cram_index &&
-				ak4961->cram_firmware[cram_index] != NULL) {
+		if (cram_index != ex_cram_index) {
 
 			cram_fwbuf = kmemdup(ak4961->cram_firmware[cram_index]->data,
 					ak4961->cram_firmware[cram_index]->size, GFP_KERNEL);
@@ -1644,32 +1579,11 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 
 			if (interface == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 				cram_size = ak4961->cram_firmware[cram_index]->size;
-			} else if (interface == AK49XX_INTERFACE_TYPE_SPI ||
-					   interface == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+			} else if (interface == AK49XX_INTERFACE_TYPE_SPI) {
 				cram_size = ak4961->cram_firmware[cram_index]->size - 2;
 			}
 		} else {
 			cram_fwbuf = 0;
-		}
-
-		if (oram_index != ex_oram_index &&
-				ak4961->oram_firmware[oram_index] != NULL) {
-
-			oram_fwbuf = kmemdup(ak4961->oram_firmware[oram_index]->data,
-					ak4961->oram_firmware[oram_index]->size, GFP_KERNEL);
-			if (!oram_fwbuf) {
-				pr_err("%s: MEM Allocation for ORAM failed\n", __func__);
-				return -ENOMEM;
-			}
-
-			if (interface == AK49XX_INTERFACE_TYPE_SLIMBUS) {
-				oram_size = ak4961->oram_firmware[oram_index]->size;
-			} else if (interface == AK49XX_INTERFACE_TYPE_SPI ||
-					   interface == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
-				oram_size = ak4961->oram_firmware[oram_index]->size - 2;
-			}
-		} else {
-			oram_fwbuf = 0;
 		}
 
 		if (pram_fwbuf) {
@@ -1680,8 +1594,9 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 					pram_size, pram_fwbuf);
 
 			if (interface != AK49XX_INTERFACE_TYPE_SLIMBUS) {
-				ret += ak49xx_bulk_read(core_res, CRC_RESULT_H8, 2, crc);
-				if (((pram_fwbuf[pram_size] << 8) + pram_fwbuf[pram_size + 1])
+				ret += ak49xx_bulk_read(codec->control_data,
+						CRC_RESULT_H8, 2, crc);
+				if (((pram_fwbuf[pram_size + 1] << 8) + pram_fwbuf[pram_size + 2])
 						!= ((crc[0] << 8) + crc[1])) {
 					ret = -EIO;
 					pr_err("%s: PRAM download CRC failed\n", __func__);
@@ -1700,8 +1615,9 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 					cram_size, cram_fwbuf);
 
 			if (interface != AK49XX_INTERFACE_TYPE_SLIMBUS) {
-				ret += ak49xx_bulk_read(core_res, CRC_RESULT_H8, 2, crc);
-				if (((cram_fwbuf[cram_size] << 8) + cram_fwbuf[cram_size + 1])
+				ret += ak49xx_bulk_read(codec->control_data,
+						CRC_RESULT_H8, 2, crc);
+				if (((cram_fwbuf[cram_size + 1] << 8) + cram_fwbuf[cram_size + 2])
 						!= ((crc[0] << 8) + crc[1])) {
 					ret = -EIO;
 					pr_err("%s: CRAM download CRC failed\n", __func__);
@@ -1709,24 +1625,6 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 			}
 			if (ret) {
 				pr_err("%s: CRAM download failed\n", __func__);
-			}
-		}
-
-		if (oram_fwbuf) {
-
-			ret += ak49xx_ram_write(codec->control_data, 0x07, 0x00, 0x00,
-					oram_size, oram_fwbuf);
-
-			if (interface != AK49XX_INTERFACE_TYPE_SLIMBUS) {
-				ret += ak49xx_bulk_read(core_res, CRC_RESULT_H8, 2, crc);
-				if (((oram_fwbuf[oram_size] << 8) + oram_fwbuf[oram_size + 1])
-						!= ((crc[0] << 8) + crc[1])) {
-					ret = -EIO;
-					pr_err("%s: ORAM download CRC failed\n", __func__);
-				}
-			}
-			if (ret) {
-				pr_err("%s: ORAM download failed\n", __func__);
 			}
 		}
 
@@ -1743,6 +1641,9 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 		case DSP_MODE_NARROW_HANDSET:
 		case DSP_MODE_NARROW_HEADSET:
 		case DSP_MODE_NARROW_HANDSFREE:
+		case DSP_MODE_BEX_HANDSET:
+		case DSP_MODE_BEX_HEADSET:
+		case DSP_MODE_BEX_HANDSFREE:
 			snd_soc_write(codec, DSP_SETTING1, 0x68);
 			snd_soc_write(codec, DSP_SETTING2, 0x3C);
 			snd_soc_write(codec, DSP_SETTING3, 0x09);
@@ -1762,34 +1663,23 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 			snd_soc_write(codec, DSP_SETTING3, 0x0B);
 			snd_soc_write(codec, DSP_SETTING5, 0x01);
 			break;
+		case DSP_MODE_CAMERA_RECORD:
 		case DSP_MODE_SOUND_RECORD:
 		case DSP_MODE_MUSIC_SPEAKER:
-			snd_soc_write(codec, DSP_SETTING1, 0x62);
+			snd_soc_write(codec, DSP_SETTING1, 0x63);
 			snd_soc_write(codec, DSP_SETTING2, 0x3C);
-			snd_soc_write(codec, DSP_SETTING3, 0x0A);
-			snd_soc_write(codec, DSP_SETTING5, 0x01);
-			break;
-		case DSP_MODE_KARAOKE_HEAVY:
-		case DSP_MODE_KARAOKE_LIGHT:
-		case DSP_MODE_KARAOKE_MIDDLE:
-		case DSP_MODE_BARGE_IN:
-			snd_soc_write(codec, DSP_SETTING1, 0x20);
-			snd_soc_write(codec, DSP_SETTING2, 0x00);
-			snd_soc_write(codec, DSP_SETTING3, 0x00);
+			snd_soc_write(codec, DSP_SETTING3, 0x0B);
 			snd_soc_write(codec, DSP_SETTING5, 0x01);
 			break;
 		default:
 			break;
 		}
+
 		if (ak4961_dsp_mode == DSP_MODE_OFF) {
 			snd_soc_update_bits(codec, FLOW_CONTROL_1, 0x03, 0x00);
 			ak4961->state = AK4961_IDLE;
 		} else {
 //			snd_soc_write(codec, FLOW_CONTROL_3, 0x01);
-			if (dsp_sync_domain & 0x07) {
-				snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR5, 0x07,
-						dsp_sync_domain);
-			}
 			ak4961->state = AK4961_DSPRSTNON;
 		}
 	}
@@ -1799,9 +1689,6 @@ static int ak4961_set_dsp_mode(struct snd_kcontrol *kcontrol,
 	}
 	if (cram_fwbuf) {
 		kfree(cram_fwbuf);
-	}
-	if (oram_fwbuf) {
-		kfree(oram_fwbuf);
 	}
 	return ret;
 }
@@ -1980,8 +1867,7 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kcontrol,
 		ucontrol->value.integer.value[0]);
 
 	mutex_lock(&codec->mutex);
-	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS &&
-		ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS) {
 		if (dai_id != SB1_CAP) {
 			dev_err(codec->dev, "%s: invalid AIF for I2S mode\n",
 				__func__);
@@ -1996,18 +1882,16 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kcontrol,
 		/* only add to the list if value not set
 		 */
 		if (enable && !(widget->value & 1 << port_id)) {
-
-			if (ak4961_p->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS ||
-				ak4961_p->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI)
+			if (ak4961_p->intf_type ==
+				AK49XX_INTERFACE_TYPE_SLIMBUS)
 				vtable = vport_check_table[dai_id];
 			if (ak4961_p->intf_type == AK49XX_INTERFACE_TYPE_I2C ||
 					ak4961_p->intf_type == AK49XX_INTERFACE_TYPE_SPI)
 				vtable = vport_i2s_check_table[dai_id];
-
 			if (ak49xx_tx_vport_validation(
 						vtable,
 						port_id,
-						ak4961_p->dai, NUM_CODEC_DAIS)) {
+						ak4961_p->dai)) {
 				dev_dbg(codec->dev, "%s: TX%u is used by other virtual port\n",
 					__func__, port_id + 1);
 				mutex_unlock(&codec->mutex);
@@ -2040,9 +1924,9 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: name %s sname %s updated value %u shift %d\n", __func__,
 		widget->name, widget->sname, widget->value, widget->shift);
 
-	mutex_unlock(&codec->mutex);
 	snd_soc_dapm_mixer_update_power(widget, kcontrol, enable);
 
+	mutex_unlock(&codec->mutex);
 	return 0;
 }
 
@@ -2079,9 +1963,8 @@ static int slim_rx_mux_put(struct snd_kcontrol *kcontrol,
 
 	mutex_lock(&codec->mutex);
 
-	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS &&
-		ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
-		if (widget->value > 2) {
+	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS) {
+		if (widget->value > 1) {
 			dev_err(codec->dev, "%s: invalid AIF for I2S mode\n",
 				__func__);
 			goto err;
@@ -2107,7 +1990,7 @@ static int slim_rx_mux_put(struct snd_kcontrol *kcontrol,
 	case 2:
 		if (ak49xx_rx_vport_validation(port_id +
 			AK4961_RX_PORT_START_NUMBER,
-			&ak4961_p->dai[SB2_PB].ak49xx_ch_list)) {
+			&ak4961_p->dai[SB1_PB].ak49xx_ch_list)) {
 			dev_dbg(codec->dev, "%s: RX%u is used by current requesting AIF_PB itself\n",
 				__func__, port_id + 1);
 			goto rtn;
@@ -2118,7 +2001,7 @@ static int slim_rx_mux_put(struct snd_kcontrol *kcontrol,
 	case 3:
 		if (ak49xx_rx_vport_validation(port_id +
 			AK4961_RX_PORT_START_NUMBER,
-			&ak4961_p->dai[SB3_PB].ak49xx_ch_list)) {
+			&ak4961_p->dai[SB1_PB].ak49xx_ch_list)) {
 			dev_dbg(codec->dev, "%s: RX%u is used by current requesting AIF_PB itself\n",
 				__func__, port_id + 1);
 			goto rtn;
@@ -2131,8 +2014,8 @@ static int slim_rx_mux_put(struct snd_kcontrol *kcontrol,
 		goto err;
 	}
 rtn:
+	snd_soc_dapm_mux_update_power(widget, kcontrol, 1, widget->value, e);
 	mutex_unlock(&codec->mutex);
-	snd_soc_dapm_mux_update_power(widget, kcontrol,1,widget->value, e);
 	return 0;
 err:
 	mutex_unlock(&codec->mutex);
@@ -2157,53 +2040,7 @@ static const struct snd_kcontrol_new slim_rx_mux[AK4961_RX_MAX] = {
 			  slim_rx_mux_get, slim_rx_mux_put),
 };
 
-static const struct snd_kcontrol_new slim_cap1_mixer[] = {
-	SOC_SINGLE_EXT("SLIM TX1", SND_SOC_NOPM, AK4961_TX1, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX2", SND_SOC_NOPM, AK4961_TX2, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX3", SND_SOC_NOPM, AK4961_TX3, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX4", SND_SOC_NOPM, AK4961_TX4, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX5", SND_SOC_NOPM, AK4961_TX5, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX6", SND_SOC_NOPM, AK4961_TX6, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX7", SND_SOC_NOPM, AK4961_TX7, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX8", SND_SOC_NOPM, AK4961_TX8, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX9", SND_SOC_NOPM, AK4961_TX9, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX10", SND_SOC_NOPM, AK4961_TX10, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-};
-
-static const struct snd_kcontrol_new slim_cap2_mixer[] = {
-	SOC_SINGLE_EXT("SLIM TX1", SND_SOC_NOPM, AK4961_TX1, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX2", SND_SOC_NOPM, AK4961_TX2, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX3", SND_SOC_NOPM, AK4961_TX3, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX4", SND_SOC_NOPM, AK4961_TX4, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX5", SND_SOC_NOPM, AK4961_TX5, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX6", SND_SOC_NOPM, AK4961_TX6, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX7", SND_SOC_NOPM, AK4961_TX7, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX8", SND_SOC_NOPM, AK4961_TX8, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX9", SND_SOC_NOPM, AK4961_TX9, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("SLIM TX10", SND_SOC_NOPM, AK4961_TX10, 1, 0,
-			slim_tx_mixer_get, slim_tx_mixer_put),
-};
-
-static const struct snd_kcontrol_new slim_cap3_mixer[] = {
+static const struct snd_kcontrol_new slim_cap_mixer[] = {
 	SOC_SINGLE_EXT("SLIM TX1", SND_SOC_NOPM, AK4961_TX1, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
 	SOC_SINGLE_EXT("SLIM TX2", SND_SOC_NOPM, AK4961_TX2, 1, 0,
@@ -2242,14 +2079,13 @@ static int ak4961_codec_enable_slimrx(struct snd_soc_dapm_widget *w,
 		__func__, w->codec->name, w->codec->num_dai, w->sname, event);
 
 	/* Execute the callback only if interface type is slimbus */
-	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS &&
-		ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS_SPI)
+	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS)
 		return 0;
 
-	dai = &ak4961_p->dai[w->shift];
 	pr_debug("%s: w->name %s w->shift %d event %d\n",
 		 __func__, w->name, w->shift, event);
 
+	dai = &ak4961_p->dai[w->shift];
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		ret = ak49xx_cfg_slim_sch_rx(core, &dai->ak49xx_ch_list,
@@ -2286,8 +2122,7 @@ static int ak4961_codec_enable_slimtx(struct snd_soc_dapm_widget *w,
 		__func__, w->codec->name, w->codec->num_dai, w->sname);
 
 	/* Execute the callback only if interface type is slimbus */
-	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS &&
-		ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS_SPI)
+	if (ak4961_p->intf_type != AK49XX_INTERFACE_TYPE_SLIMBUS)
 		return 0;
 
 	pr_debug("%s(): w->name %s event %d w->shift %d\n",
@@ -2731,6 +2566,15 @@ static const struct soc_enum pmmp1_cp1_switch_num =
 static const struct snd_kcontrol_new pmmp1_cp1_switch_kctrl =
 	SOC_DAPM_ENUM_VIRT("PMMP1 CP1 Switch Mux", pmmp1_cp1_switch_num);
 
+//Smart PA
+static const char *smart_pa_init_switch_text[] = {"Off", "On"};
+
+static const struct soc_enum smart_pa_init_switch_num =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 2, smart_pa_init_switch_text);
+
+static const struct snd_kcontrol_new smart_pa_init_switch_kctrl =
+	SOC_DAPM_ENUM_VIRT("smart pa init Switch Mux", smart_pa_init_switch_num);
+//end
 static const char *ain_pmmp_select_text[] =
 	{"NONE", "MPWR1A", "MPWR1B", "MPWR1C", "MPWR2"};
 
@@ -2794,13 +2638,6 @@ static const struct snd_kcontrol_new dmic2l_pmmp_select_kctrl =
 static const struct snd_kcontrol_new dmic2r_pmmp_select_kctrl =
 	SOC_DAPM_ENUM_VIRT("DMIC2R PMMP Selector Mux", dmic2r_pmmp_select_num);
 
-static const char *smart_pa_init_switch_text[] = {"Off", "On"};
-
-static const struct soc_enum smart_pa_init_switch_num =
-	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 2, smart_pa_init_switch_text);
-
-static const struct snd_kcontrol_new smart_pa_init_switch_kctrl =
-	SOC_DAPM_ENUM_VIRT("smart pa init Switch Mux", smart_pa_init_switch_num);
 
 static int ak4961_codec_enable_dmic(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
@@ -2857,10 +2694,6 @@ static int ak4961_codec_pll_setup(struct snd_soc_dapm_widget *w,
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
-		//if (snd_soc_read(codec, SYNC_DOMAIN_SELECTOR5) & 0x07) {
-			//snd_soc_update_bits(codec, SYNC_DOMAIN_SELECTOR5, 0x07, 0x00);
-			//usleep_range(16000, 16000);
-		//}
 		snd_soc_update_bits(codec, FLOW_CONTROL_3, 0x01, 0x00);     // DSPRSTN Off
 		snd_soc_update_bits(codec, POWER_MANAGEMENT_2, 0x10, 0x00); // PMAIF Off
 		snd_soc_update_bits(codec, POWER_MANAGEMENT_1, 0x01, 0x00); // PMPLL Off
@@ -2877,7 +2710,6 @@ static int ak4961_codec_srca_setup(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		snd_soc_update_bits(codec, SRC_CLK_SETTING, 0x01, 0x01);
 		snd_soc_update_bits(codec, SRC_MUTE_CONTROL, 0x10, 0x10);
 		val = snd_soc_read(codec, SYNC_DOMAIN_SELECTOR7);
 		snd_soc_write(codec, SYNC_DOMAIN_SELECTOR7, val);
@@ -2900,7 +2732,6 @@ static int ak4961_codec_srcb_setup(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		snd_soc_update_bits(codec, SRC_CLK_SETTING, 0x01, 0x01);
 		snd_soc_update_bits(codec, SRC_MUTE_CONTROL, 0x20, 0x20);
 		val = snd_soc_read(codec, SYNC_DOMAIN_SELECTOR7);
 		snd_soc_write(codec, SYNC_DOMAIN_SELECTOR7, val);
@@ -2923,7 +2754,6 @@ static int ak4961_codec_srcc_setup(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		snd_soc_update_bits(codec, SRC_CLK_SETTING, 0x01, 0x01);
 		snd_soc_update_bits(codec, SRC_MUTE_CONTROL, 0x40, 0x40);
 		val = snd_soc_read(codec, SYNC_DOMAIN_SELECTOR8);
 		snd_soc_write(codec, SYNC_DOMAIN_SELECTOR8, val);
@@ -2946,7 +2776,6 @@ static int ak4961_codec_srcd_setup(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		snd_soc_update_bits(codec, SRC_CLK_SETTING, 0x01, 0x01);
 		snd_soc_update_bits(codec, SRC_MUTE_CONTROL, 0x80, 0x80);
 		val = snd_soc_read(codec, SYNC_DOMAIN_SELECTOR8);
 		snd_soc_write(codec, SYNC_DOMAIN_SELECTOR8, val);
@@ -3171,45 +3000,37 @@ static const struct snd_kcontrol_new mixera_select_kctrl =
 static const struct snd_kcontrol_new mixerb_select_kctrl =
 	SOC_DAPM_ENUM_VIRT("MIXBO Virt Switch Mux", mixerb_select_enum);
 
-static const struct snd_kcontrol_new dspo1_mixer_kctrl[] = {
-	SOC_DAPM_SINGLE("DSPI1_Switch", DSPI1_VIRT_MIXER, 0, 1, 0),
-	SOC_DAPM_SINGLE("DSPI2_Switch", DSPI1_VIRT_MIXER, 1, 1, 0),
-	SOC_DAPM_SINGLE("DSPI3_Switch", DSPI1_VIRT_MIXER, 2, 1, 0),
-	SOC_DAPM_SINGLE("DSPI4_Switch", DSPI1_VIRT_MIXER, 3, 1, 0),
-	SOC_DAPM_SINGLE("DSPI5_Switch", DSPI1_VIRT_MIXER, 4, 1, 0),
-};
+static const char *dsp_select_text[] = {"ZERO", "DSPI1", "DSPI2", "DSPI3", "DSPI4", "DSPI5"};
 
-static const struct snd_kcontrol_new dspo2_mixer_kctrl[] = {
-	SOC_DAPM_SINGLE("DSPI1_Switch", DSPI2_VIRT_MIXER, 0, 1, 0),
-	SOC_DAPM_SINGLE("DSPI2_Switch", DSPI2_VIRT_MIXER, 1, 1, 0),
-	SOC_DAPM_SINGLE("DSPI3_Switch", DSPI2_VIRT_MIXER, 2, 1, 0),
-	SOC_DAPM_SINGLE("DSPI4_Switch", DSPI2_VIRT_MIXER, 3, 1, 0),
-	SOC_DAPM_SINGLE("DSPI5_Switch", DSPI2_VIRT_MIXER, 4, 1, 0),
-};
+static const struct soc_enum dspo1_select_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 6, dsp_select_text);
 
-static const struct snd_kcontrol_new dspo3_mixer_kctrl[] = {
-	SOC_DAPM_SINGLE("DSPI1_Switch", DSPI3_VIRT_MIXER, 0, 1, 0),
-	SOC_DAPM_SINGLE("DSPI2_Switch", DSPI3_VIRT_MIXER, 1, 1, 0),
-	SOC_DAPM_SINGLE("DSPI3_Switch", DSPI3_VIRT_MIXER, 2, 1, 0),
-	SOC_DAPM_SINGLE("DSPI4_Switch", DSPI3_VIRT_MIXER, 3, 1, 0),
-	SOC_DAPM_SINGLE("DSPI5_Switch", DSPI3_VIRT_MIXER, 4, 1, 0),
-};
+static const struct soc_enum dspo2_select_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 6, dsp_select_text);
 
-static const struct snd_kcontrol_new dspo4_mixer_kctrl[] = {
-	SOC_DAPM_SINGLE("DSPI1_Switch", DSPI4_VIRT_MIXER, 0, 1, 0),
-	SOC_DAPM_SINGLE("DSPI2_Switch", DSPI4_VIRT_MIXER, 1, 1, 0),
-	SOC_DAPM_SINGLE("DSPI3_Switch", DSPI4_VIRT_MIXER, 2, 1, 0),
-	SOC_DAPM_SINGLE("DSPI4_Switch", DSPI4_VIRT_MIXER, 3, 1, 0),
-	SOC_DAPM_SINGLE("DSPI5_Switch", DSPI4_VIRT_MIXER, 4, 1, 0),
-};
+static const struct soc_enum dspo3_select_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 6, dsp_select_text);
 
-static const struct snd_kcontrol_new dspo5_mixer_kctrl[] = {
-	SOC_DAPM_SINGLE("DSPI1_Switch", DSPI5_VIRT_MIXER, 0, 1, 0),
-	SOC_DAPM_SINGLE("DSPI2_Switch", DSPI5_VIRT_MIXER, 1, 1, 0),
-	SOC_DAPM_SINGLE("DSPI3_Switch", DSPI5_VIRT_MIXER, 2, 1, 0),
-	SOC_DAPM_SINGLE("DSPI4_Switch", DSPI5_VIRT_MIXER, 3, 1, 0),
-	SOC_DAPM_SINGLE("DSPI5_Switch", DSPI5_VIRT_MIXER, 4, 1, 0),
-};
+static const struct soc_enum dspo4_select_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 6, dsp_select_text);
+
+static const struct soc_enum dspo5_select_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, 6, dsp_select_text);
+
+static const struct snd_kcontrol_new dspo1_select_kctrl =
+	SOC_DAPM_ENUM_VIRT("DSPO1 Selector Mux", dspo1_select_enum);
+
+static const struct snd_kcontrol_new dspo2_select_kctrl =
+	SOC_DAPM_ENUM_VIRT("DSPO2 Selector Mux", dspo2_select_enum);
+
+static const struct snd_kcontrol_new dspo3_select_kctrl =
+	SOC_DAPM_ENUM_VIRT("DSPO3 Selector Mux", dspo3_select_enum);
+
+static const struct snd_kcontrol_new dspo4_select_kctrl =
+	SOC_DAPM_ENUM_VIRT("DSPO4 Selector Mux", dspo4_select_enum);
+
+static const struct snd_kcontrol_new dspo5_select_kctrl =
+	SOC_DAPM_ENUM_VIRT("DSPO5 Selector Mux", dspo5_select_enum);
 
 
 /* Todo: Have seperate dapm widgets for I2S and Slimbus.
@@ -3257,13 +3078,13 @@ static const struct snd_soc_dapm_widget ak4961_dapm_widgets[] = {
 				SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MIXER("SB1_CAP Mixer", SND_SOC_NOPM, SB1_CAP, 0,
-		slim_cap1_mixer, ARRAY_SIZE(slim_cap1_mixer)),
+		slim_cap_mixer, ARRAY_SIZE(slim_cap_mixer)),
 
 	SND_SOC_DAPM_MIXER("SB2_CAP Mixer", SND_SOC_NOPM, SB2_CAP, 0,
-		slim_cap2_mixer, ARRAY_SIZE(slim_cap2_mixer)),
+		slim_cap_mixer, ARRAY_SIZE(slim_cap_mixer)),
 
 	SND_SOC_DAPM_MIXER("SB3_CAP Mixer", SND_SOC_NOPM, SB3_CAP, 0,
-		slim_cap3_mixer, ARRAY_SIZE(slim_cap3_mixer)),
+		slim_cap_mixer, ARRAY_SIZE(slim_cap_mixer)),
 
 	/* Digital Mic Inputs */
 	SND_SOC_DAPM_INPUT("DMIC1"),
@@ -3283,13 +3104,6 @@ static const struct snd_soc_dapm_widget ak4961_dapm_widgets[] = {
 	SND_SOC_DAPM_MUX("MIC2L Selector", SND_SOC_NOPM, 0, 0, &mic2l_select_kctrl),
 
 	SND_SOC_DAPM_VIRT_MUX("MIC2R Selector", SND_SOC_NOPM, 0, 0, &mic2r_select_kctrl),
-
-	/* Smart PA */
-	SND_SOC_DAPM_INPUT("Smart PA Input"),
-
-	SND_SOC_DAPM_OUTPUT("Smart PA Output"),
-
-	SND_SOC_DAPM_VIRT_MUX("Smart PA Init Switch", SND_SOC_NOPM, 0, 0, &smart_pa_init_switch_kctrl),
 
 	/* MIC Power */
 	SND_SOC_DAPM_INPUT("MRF1"),
@@ -3435,6 +3249,10 @@ static const struct snd_soc_dapm_widget ak4961_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("LINEOUT4", ak4961_codec_enable_lout2rdn),
 
 	SND_SOC_DAPM_HP("RCV", ak4961_codec_enable_rcv),
+//Smart PA output 
+	SND_SOC_DAPM_OUTPUT("Smart PA"),
+	SND_SOC_DAPM_INPUT("Smart PA Init"),
+	SND_SOC_DAPM_VIRT_MUX("Smart PA Init Switch", SND_SOC_NOPM, 0, 0, &smart_pa_init_switch_kctrl),
 
 	/* Power Supply */
 	SND_SOC_DAPM_SUPPLY_S("PMSW", 1, FLOW_CONTROL_1, 0, 0,
@@ -3473,20 +3291,15 @@ static const struct snd_soc_dapm_widget ak4961_dapm_widgets[] = {
 		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
 	/* DSP stuff */
-	SND_SOC_DAPM_MIXER("DSPO1 Mixer", SND_SOC_NOPM, 0, 0,
-		dspo1_mixer_kctrl, ARRAY_SIZE(dspo1_mixer_kctrl)),
+	SND_SOC_DAPM_VIRT_MUX("DSPO1 Selector", SND_SOC_NOPM, 0, 0, &dspo1_select_kctrl),
 
-	SND_SOC_DAPM_MIXER("DSPO2 Mixer", SND_SOC_NOPM, 0, 0,
-		dspo2_mixer_kctrl, ARRAY_SIZE(dspo2_mixer_kctrl)),
+	SND_SOC_DAPM_VIRT_MUX("DSPO2 Selector", SND_SOC_NOPM, 0, 0, &dspo2_select_kctrl),
 
-	SND_SOC_DAPM_MIXER("DSPO3 Mixer", SND_SOC_NOPM, 0, 0,
-		dspo3_mixer_kctrl, ARRAY_SIZE(dspo3_mixer_kctrl)),
+	SND_SOC_DAPM_VIRT_MUX("DSPO3 Selector", SND_SOC_NOPM, 0, 0, &dspo3_select_kctrl),
 
-	SND_SOC_DAPM_MIXER("DSPO4 Mixer", SND_SOC_NOPM, 0, 0,
-		dspo4_mixer_kctrl, ARRAY_SIZE(dspo4_mixer_kctrl)),
+	SND_SOC_DAPM_VIRT_MUX("DSPO4 Selector", SND_SOC_NOPM, 0, 0, &dspo4_select_kctrl),
 
-	SND_SOC_DAPM_MIXER("DSPO5 Mixer", SND_SOC_NOPM, 0, 0,
-		dspo5_mixer_kctrl, ARRAY_SIZE(dspo5_mixer_kctrl)),
+	SND_SOC_DAPM_VIRT_MUX("DSPO5 Selector", SND_SOC_NOPM, 0, 0, &dspo5_select_kctrl),
 
 	/* VAD stuff */
 	SND_SOC_DAPM_PGA_E("VAD", VAD_SETTING_1, 3, 0, NULL, 0,
@@ -3558,12 +3371,12 @@ static const struct snd_soc_dapm_route audio_map[] = {
 
 	// DMIC path
 	{"ADC DMIC1", NULL, "DMIC1"},
-//	{"ADC DMIC1", NULL, "Charge Pump1"},
+	{"ADC DMIC1", NULL, "Charge Pump1"},
 	{"MIC1L Selector", "Digital", "ADC DMIC1"},
 	{"MIC1R Selector", "Digital", "ADC DMIC1"},
 
 	{"ADC DMIC2", NULL, "DMIC2"},
-//	{"ADC DMIC2", NULL, "Charge Pump1"},
+	{"ADC DMIC2", NULL, "Charge Pump1"},
 	{"MIC2L Selector", "Digital", "ADC DMIC2"},
 	{"MIC2R Selector", "Digital", "ADC DMIC2"},
 
@@ -3793,14 +3606,6 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SB2 CAP", NULL, "PLL CLK"},
 	{"SB3 CAP", NULL, "PLL CLK"},
 
-	// Smart PA Init Path
-	{"Smart PA Init Switch", "On", "Smart PA Input"},
-	{"Smart PA Output", NULL, "Smart PA Init Switch"},
-	{"Smart PA Output", NULL, "PLL CLK"},
-	{"Smart PA Output", NULL, "SDTO2 Source Selector"},
-	{"Smart PA Output", NULL, "SDTO3 Source Selector"},
-	{"Smart PA Output", NULL, "SDTO4 Source Selector"},
-
 	// SRC path
 	{"SRCA", NULL, "PMSW"},
 	{"SRCB", NULL, "PMSW"},
@@ -3819,35 +3624,35 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"MIXBO Virt Switch", "On", "MIXBI2 Source Selector"},
 
 	// DSP path
-	{"DSPO1 Mixer", "DSPI1_Switch", "DSPI1 Source Selector"},
-	{"DSPO1 Mixer", "DSPI2_Switch", "DSPI2 Source Selector"},
-	{"DSPO1 Mixer", "DSPI3_Switch", "DSPI3 Source Selector"},
-	{"DSPO1 Mixer", "DSPI4_Switch", "DSPI4 Source Selector"},
-	{"DSPO1 Mixer", "DSPI5_Switch", "DSPI5 Source Selector"},
+	{"DSPO1 Selector", "DSPI1", "DSPI1 Source Selector"},
+	{"DSPO1 Selector", "DSPI2", "DSPI2 Source Selector"},
+	{"DSPO1 Selector", "DSPI3", "DSPI3 Source Selector"},
+	{"DSPO1 Selector", "DSPI4", "DSPI4 Source Selector"},
+	{"DSPO1 Selector", "DSPI5", "DSPI5 Source Selector"},
 
-	{"DSPO2 Mixer", "DSPI1_Switch", "DSPI1 Source Selector"},
-	{"DSPO2 Mixer", "DSPI2_Switch", "DSPI2 Source Selector"},
-	{"DSPO2 Mixer", "DSPI3_Switch", "DSPI3 Source Selector"},
-	{"DSPO2 Mixer", "DSPI4_Switch", "DSPI4 Source Selector"},
-	{"DSPO2 Mixer", "DSPI5_Switch", "DSPI5 Source Selector"},
+	{"DSPO2 Selector", "DSPI1", "DSPI1 Source Selector"},
+	{"DSPO2 Selector", "DSPI2", "DSPI2 Source Selector"},
+	{"DSPO2 Selector", "DSPI3", "DSPI3 Source Selector"},
+	{"DSPO2 Selector", "DSPI4", "DSPI4 Source Selector"},
+	{"DSPO2 Selector", "DSPI5", "DSPI5 Source Selector"},
 
-	{"DSPO3 Mixer", "DSPI1_Switch", "DSPI1 Source Selector"},
-	{"DSPO3 Mixer", "DSPI2_Switch", "DSPI2 Source Selector"},
-	{"DSPO3 Mixer", "DSPI3_Switch", "DSPI3 Source Selector"},
-	{"DSPO3 Mixer", "DSPI4_Switch", "DSPI4 Source Selector"},
-	{"DSPO3 Mixer", "DSPI5_Switch", "DSPI5 Source Selector"},
+	{"DSPO3 Selector", "DSPI1", "DSPI1 Source Selector"},
+	{"DSPO3 Selector", "DSPI2", "DSPI2 Source Selector"},
+	{"DSPO3 Selector", "DSPI3", "DSPI3 Source Selector"},
+	{"DSPO3 Selector", "DSPI4", "DSPI4 Source Selector"},
+	{"DSPO3 Selector", "DSPI5", "DSPI5 Source Selector"},
 
-	{"DSPO4 Mixer", "DSPI1_Switch", "DSPI1 Source Selector"},
-	{"DSPO4 Mixer", "DSPI2_Switch", "DSPI2 Source Selector"},
-	{"DSPO4 Mixer", "DSPI3_Switch", "DSPI3 Source Selector"},
-	{"DSPO4 Mixer", "DSPI4_Switch", "DSPI4 Source Selector"},
-	{"DSPO4 Mixer", "DSPI5_Switch", "DSPI5 Source Selector"},
+	{"DSPO4 Selector", "DSPI1", "DSPI1 Source Selector"},
+	{"DSPO4 Selector", "DSPI2", "DSPI2 Source Selector"},
+	{"DSPO4 Selector", "DSPI3", "DSPI3 Source Selector"},
+	{"DSPO4 Selector", "DSPI4", "DSPI4 Source Selector"},
+	{"DSPO4 Selector", "DSPI5", "DSPI5 Source Selector"},
 
-	{"DSPO5 Mixer", "DSPI1_Switch", "DSPI1 Source Selector"},
-	{"DSPO5 Mixer", "DSPI2_Switch", "DSPI2 Source Selector"},
-	{"DSPO5 Mixer", "DSPI3_Switch", "DSPI3 Source Selector"},
-	{"DSPO5 Mixer", "DSPI4_Switch", "DSPI4 Source Selector"},
-	{"DSPO5 Mixer", "DSPI5_Switch", "DSPI5 Source Selector"},
+	{"DSPO5 Selector", "DSPI1", "DSPI1 Source Selector"},
+	{"DSPO5 Selector", "DSPI2", "DSPI2 Source Selector"},
+	{"DSPO5 Selector", "DSPI3", "DSPI3 Source Selector"},
+	{"DSPO5 Selector", "DSPI4", "DSPI4 Source Selector"},
+	{"DSPO5 Selector", "DSPI5", "DSPI5 Source Selector"},
 
 	// VAD path
 	{"VAD", NULL, "VAD Source Selector"},
@@ -3869,16 +3674,16 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SBO1R Source Selector", "SRCCO", "SRCC"},
 	{"SBO1L Source Selector", "SRCDO", "SRCD"},
 	{"SBO1R Source Selector", "SRCDO", "SRCD"},
-	{"SBO1L Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SBO1R Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SBO1L Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SBO1R Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SBO1L Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SBO1R Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SBO1L Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SBO1R Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SBO1L Source Selector", "DSPO5", "DSPO5 Mixer"},
-	{"SBO1R Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SBO1L Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SBO1R Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SBO1L Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SBO1R Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SBO1L Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SBO1R Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SBO1L Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SBO1R Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SBO1L Source Selector", "DSPO5", "DSPO5 Selector"},
+	{"SBO1R Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SBO1L Source Selector", "VADO", "VAD"},
 	{"SBO1R Source Selector", "VADO", "VAD"},
 	{"SBO1L Source Selector", "SBI1", "SLIM RX1"},
@@ -3910,16 +3715,16 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SBO2R Source Selector", "SRCCO", "SRCC"},
 	{"SBO2L Source Selector", "SRCDO", "SRCD"},
 	{"SBO2R Source Selector", "SRCDO", "SRCD"},
-	{"SBO2L Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SBO2R Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SBO2L Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SBO2R Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SBO2L Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SBO2R Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SBO2L Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SBO2R Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SBO2L Source Selector", "DSPO5", "DSPO5 Mixer"},
-	{"SBO2R Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SBO2L Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SBO2R Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SBO2L Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SBO2R Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SBO2L Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SBO2R Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SBO2L Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SBO2R Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SBO2L Source Selector", "DSPO5", "DSPO5 Selector"},
+	{"SBO2R Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SBO2L Source Selector", "VADO", "VAD"},
 	{"SBO2R Source Selector", "VADO", "VAD"},
 	{"SBO2L Source Selector", "SBI1", "SLIM RX1"},
@@ -3947,11 +3752,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DAC1 Source Selector", "SRCBO", "SRCB"},
 	{"DAC1 Source Selector", "SRCCO", "SRCC"},
 	{"DAC1 Source Selector", "SRCDO", "SRCD"},
-	{"DAC1 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DAC1 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DAC1 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DAC1 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DAC1 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DAC1 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DAC1 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DAC1 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DAC1 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DAC1 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DAC1 Source Selector", "VADO", "VAD"},
 	{"DAC1 Source Selector", "ADC1", "MIC1L Selector"},
 	{"DAC1 Source Selector", "ADC1", "MIC1R Selector"},
@@ -3970,11 +3775,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DAC2 Source Selector", "SRCBO", "SRCB"},
 	{"DAC2 Source Selector", "SRCCO", "SRCC"},
 	{"DAC2 Source Selector", "SRCDO", "SRCD"},
-	{"DAC2 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DAC2 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DAC2 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DAC2 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DAC2 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DAC2 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DAC2 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DAC2 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DAC2 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DAC2 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DAC2 Source Selector", "VADO", "VAD"},
 	{"DAC2 Source Selector", "ADC1", "MIC1L Selector"},
 	{"DAC2 Source Selector", "ADC1", "MIC1R Selector"},
@@ -3997,11 +3802,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"MIXAI1 Source Selector", "SRCBO", "SRCB"},
 	{"MIXAI1 Source Selector", "SRCCO", "SRCC"},
 	{"MIXAI1 Source Selector", "SRCDO", "SRCD"},
-	{"MIXAI1 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"MIXAI1 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"MIXAI1 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"MIXAI1 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"MIXAI1 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"MIXAI1 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"MIXAI1 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"MIXAI1 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"MIXAI1 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"MIXAI1 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"MIXAI1 Source Selector", "VADO", "VAD"},
 
 	{"MIXAI2 Source Selector", "SBI1", "SLIM RX1"},
@@ -4020,11 +3825,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"MIXAI2 Source Selector", "SRCBO", "SRCB"},
 	{"MIXAI2 Source Selector", "SRCCO", "SRCC"},
 	{"MIXAI2 Source Selector", "SRCDO", "SRCD"},
-	{"MIXAI2 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"MIXAI2 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"MIXAI2 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"MIXAI2 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"MIXAI2 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"MIXAI2 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"MIXAI2 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"MIXAI2 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"MIXAI2 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"MIXAI2 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"MIXAI2 Source Selector", "VADO", "VAD"},	
 
 	{"MIXBI1 Source Selector", "SBI1", "SLIM RX1"},
@@ -4043,11 +3848,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"MIXBI1 Source Selector", "SRCBO", "SRCB"},
 	{"MIXBI1 Source Selector", "SRCCO", "SRCC"},
 	{"MIXBI1 Source Selector", "SRCDO", "SRCD"},
-	{"MIXBI1 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"MIXBI1 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"MIXBI1 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"MIXBI1 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"MIXBI1 Source Selector", "DSPO5", "DSPO5 Mixer"},	
+	{"MIXBI1 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"MIXBI1 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"MIXBI1 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"MIXBI1 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"MIXBI1 Source Selector", "DSPO5", "DSPO5 Selector"},	
 	{"MIXBI1 Source Selector", "VADO", "VAD"},
 
 	{"MIXBI2 Source Selector", "SBI1", "SLIM RX1"},
@@ -4066,11 +3871,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"MIXBI2 Source Selector", "SRCBO", "SRCB"},
 	{"MIXBI2 Source Selector", "SRCCO", "SRCC"},
 	{"MIXBI2 Source Selector", "SRCDO", "SRCD"},
-	{"MIXBI2 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"MIXBI2 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"MIXBI2 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"MIXBI2 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"MIXBI2 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"MIXBI2 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"MIXBI2 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"MIXBI2 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"MIXBI2 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"MIXBI2 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"MIXBI2 Source Selector", "VADO", "VAD"},
 
 	{"SRCAI Source Selector", "SBI1", "SLIM RX1"},
@@ -4089,11 +3894,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SRCAI Source Selector", "SRCBO", "SRCB"},
 	{"SRCAI Source Selector", "SRCCO", "SRCC"},
 	{"SRCAI Source Selector", "SRCDO", "SRCD"},
-	{"SRCAI Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SRCAI Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SRCAI Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SRCAI Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SRCAI Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SRCAI Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SRCAI Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SRCAI Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SRCAI Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SRCAI Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SRCAI Source Selector", "VADO", "VAD"},
 
 	{"SRCBI Source Selector", "SBI1", "SLIM RX1"},
@@ -4112,11 +3917,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SRCBI Source Selector", "SRCBO", "SRCB"},
 	{"SRCBI Source Selector", "SRCCO", "SRCC"},
 	{"SRCBI Source Selector", "SRCDO", "SRCD"},
-	{"SRCBI Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SRCBI Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SRCBI Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SRCBI Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SRCBI Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SRCBI Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SRCBI Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SRCBI Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SRCBI Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SRCBI Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SRCBI Source Selector", "VADO", "VAD"},
 
 	{"SRCCI Source Selector", "SBI1", "SLIM RX1"},
@@ -4135,11 +3940,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SRCCI Source Selector", "SRCBO", "SRCB"},
 	{"SRCCI Source Selector", "SRCCO", "SRCC"},
 	{"SRCCI Source Selector", "SRCDO", "SRCD"},
-	{"SRCCI Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SRCCI Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SRCCI Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SRCCI Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SRCCI Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SRCCI Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SRCCI Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SRCCI Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SRCCI Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SRCCI Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SRCCI Source Selector", "VADO", "VAD"},
 
 	{"SRCDI Source Selector", "SBI1", "SLIM RX1"},
@@ -4158,11 +3963,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SRCDI Source Selector", "SRCBO", "SRCB"},
 	{"SRCDI Source Selector", "SRCCO", "SRCC"},
 	{"SRCDI Source Selector", "SRCDO", "SRCD"},
-	{"SRCDI Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SRCDI Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SRCDI Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SRCDI Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SRCDI Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SRCDI Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SRCDI Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SRCDI Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SRCDI Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SRCDI Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SRCDI Source Selector", "VADO", "VAD"},
 
 	{"DSPI1 Source Selector", "SBI1", "SLIM RX1"},
@@ -4181,11 +3986,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DSPI1 Source Selector", "SRCBO", "SRCB"},
 	{"DSPI1 Source Selector", "SRCCO", "SRCC"},
 	{"DSPI1 Source Selector", "SRCDO", "SRCD"},
-	{"DSPI1 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DSPI1 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DSPI1 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DSPI1 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DSPI1 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DSPI1 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DSPI1 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DSPI1 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DSPI1 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DSPI1 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DSPI1 Source Selector", "VADO", "VAD"},
 
 	{"DSPI2 Source Selector", "SBI1", "SLIM RX1"},
@@ -4204,11 +4009,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DSPI2 Source Selector", "SRCBO", "SRCB"},
 	{"DSPI2 Source Selector", "SRCCO", "SRCC"},
 	{"DSPI2 Source Selector", "SRCDO", "SRCD"},
-	{"DSPI2 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DSPI2 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DSPI2 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DSPI2 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DSPI2 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DSPI2 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DSPI2 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DSPI2 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DSPI2 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DSPI2 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DSPI2 Source Selector", "VADO", "VAD"},
 
 	{"DSPI3 Source Selector", "SBI1", "SLIM RX1"},
@@ -4227,11 +4032,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DSPI3 Source Selector", "SRCBO", "SRCB"},
 	{"DSPI3 Source Selector", "SRCCO", "SRCC"},
 	{"DSPI3 Source Selector", "SRCDO", "SRCD"},
-	{"DSPI3 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DSPI3 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DSPI3 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DSPI3 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DSPI3 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DSPI3 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DSPI3 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DSPI3 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DSPI3 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DSPI3 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DSPI3 Source Selector", "VADO", "VAD"},
 
 	{"DSPI4 Source Selector", "SBI1", "SLIM RX1"},
@@ -4250,11 +4055,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DSPI4 Source Selector", "SRCBO", "SRCB"},
 	{"DSPI4 Source Selector", "SRCCO", "SRCC"},
 	{"DSPI4 Source Selector", "SRCDO", "SRCD"},
-	{"DSPI4 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DSPI4 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DSPI4 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DSPI4 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DSPI4 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DSPI4 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DSPI4 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DSPI4 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DSPI4 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DSPI4 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DSPI4 Source Selector", "VADO", "VAD"},
 
 	{"DSPI5 Source Selector", "SBI1", "SLIM RX1"},
@@ -4273,11 +4078,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"DSPI5 Source Selector", "SRCBO", "SRCB"},
 	{"DSPI5 Source Selector", "SRCCO", "SRCC"},
 	{"DSPI5 Source Selector", "SRCDO", "SRCD"},
-	{"DSPI5 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"DSPI5 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"DSPI5 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"DSPI5 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"DSPI5 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"DSPI5 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"DSPI5 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"DSPI5 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"DSPI5 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"DSPI5 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"DSPI5 Source Selector", "VADO", "VAD"},
 
 	{"VAD Source Selector", "SBI1", "SLIM RX1"},
@@ -4296,11 +4101,11 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"VAD Source Selector", "SRCBO", "SRCB"},
 	{"VAD Source Selector", "SRCCO", "SRCC"},
 	{"VAD Source Selector", "SRCDO", "SRCD"},
-	{"VAD Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"VAD Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"VAD Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"VAD Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"VAD Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"VAD Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"VAD Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"VAD Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"VAD Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"VAD Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"VAD Source Selector", "VADO", "VAD"},
 };
 
@@ -4380,12 +4185,18 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"AIF2 SDTO", NULL, "PLL CLK"},
 	{"AIF3 SDTO", NULL, "PLL CLK"},
 	{"AIF4 SDTO", NULL, "PLL CLK"},
+	{"Smart PA", NULL, "PLL CLK"},
+	{"Smart PA Init Switch", "On", "Smart PA Init"},
+	{"Smart PA", NULL, "Smart PA Init Switch"},
 
 	{"AIF1 SDTOA", NULL, "SDTO1A Source Selector"},
 	{"AIF1 SDTOB", NULL, "SDTO1B Source Selector"},
 	{"AIF2 SDTO", NULL, "SDTO2 Source Selector"},
 	{"AIF3 SDTO", NULL, "SDTO3 Source Selector"},
 	{"AIF4 SDTO", NULL, "SDTO4 Source Selector"},
+	
+	//Smart PA
+	{"Smart PA", NULL, "SDTO2 Source Selector"},	
 
 	{"SDTO1A Source Selector", "ADC1", "MIC1L Selector"},
 	{"SDTO1A Source Selector", "ADC1", "MIC1R Selector"},
@@ -4397,11 +4208,11 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO1A Source Selector", "SRCBO", "SRCB"},
 	{"SDTO1A Source Selector", "SRCCO", "SRCC"},
 	{"SDTO1A Source Selector", "SRCDO", "SRCD"},
-	{"SDTO1A Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SDTO1A Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SDTO1A Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SDTO1A Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SDTO1A Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SDTO1A Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SDTO1A Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SDTO1A Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SDTO1A Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SDTO1A Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SDTO1A Source Selector", "VADO", "VAD"},
 	{"SDTO1A Source Selector", "SBI1", "SLIM RX1"},
 	{"SDTO1A Source Selector", "SBI1", "SLIM RX2"},
@@ -4409,9 +4220,6 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO1A Source Selector", "SBI2", "SLIM RX4"},
 	{"SDTO1A Source Selector", "SBI3", "SLIM RX5"},
 	{"SDTO1A Source Selector", "SBI3", "SLIM RX6"},
-	{"SDTO1A Source Selector", "SDTI2", "AIF2 SDTI"},
-	{"SDTO1A Source Selector", "SDTI3", "AIF3 SDTI"},
-	{"SDTO1A Source Selector", "SDTI4", "AIF4 SDTI"},
 
 	{"SDTO1B Source Selector", "ADC1", "MIC1L Selector"},
 	{"SDTO1B Source Selector", "ADC1", "MIC1R Selector"},
@@ -4423,11 +4231,11 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO1B Source Selector", "SRCBO", "SRCB"},
 	{"SDTO1B Source Selector", "SRCCO", "SRCC"},
 	{"SDTO1B Source Selector", "SRCDO", "SRCD"},
-	{"SDTO1B Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SDTO1B Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SDTO1B Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SDTO1B Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SDTO1B Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SDTO1B Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SDTO1B Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SDTO1B Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SDTO1B Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SDTO1B Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SDTO1B Source Selector", "VADO", "VAD"},
 	{"SDTO1B Source Selector", "SBI1", "SLIM RX1"},
 	{"SDTO1B Source Selector", "SBI1", "SLIM RX2"},
@@ -4435,9 +4243,6 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO1B Source Selector", "SBI2", "SLIM RX4"},
 	{"SDTO1B Source Selector", "SBI3", "SLIM RX5"},
 	{"SDTO1B Source Selector", "SBI3", "SLIM RX6"},
-	{"SDTO1B Source Selector", "SDTI2", "AIF2 SDTI"},
-	{"SDTO1B Source Selector", "SDTI3", "AIF3 SDTI"},
-	{"SDTO1B Source Selector", "SDTI4", "AIF4 SDTI"},
 
 	{"SDTO2 Source Selector", "ADC1", "MIC1L Selector"},
 	{"SDTO2 Source Selector", "ADC1", "MIC1R Selector"},
@@ -4449,11 +4254,11 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO2 Source Selector", "SRCBO", "SRCB"},
 	{"SDTO2 Source Selector", "SRCCO", "SRCC"},
 	{"SDTO2 Source Selector", "SRCDO", "SRCD"},
-	{"SDTO2 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SDTO2 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SDTO2 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SDTO2 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SDTO2 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SDTO2 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SDTO2 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SDTO2 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SDTO2 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SDTO2 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SDTO2 Source Selector", "VADO", "VAD"},
 	{"SDTO2 Source Selector", "SBI1", "SLIM RX1"},
 	{"SDTO2 Source Selector", "SBI1", "SLIM RX2"},
@@ -4461,10 +4266,6 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO2 Source Selector", "SBI2", "SLIM RX4"},
 	{"SDTO2 Source Selector", "SBI3", "SLIM RX5"},
 	{"SDTO2 Source Selector", "SBI3", "SLIM RX6"},
-	{"SDTO2 Source Selector", "SDTI1A", "AIF1 SDTIA"},
-	{"SDTO2 Source Selector", "SDTI1B", "AIF1 SDTIB"},
-	{"SDTO2 Source Selector", "SDTI3", "AIF3 SDTI"},
-	{"SDTO2 Source Selector", "SDTI4", "AIF4 SDTI"},
 
 	{"SDTO3 Source Selector", "ADC1", "MIC1L Selector"},
 	{"SDTO3 Source Selector", "ADC1", "MIC1R Selector"},
@@ -4476,11 +4277,11 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO3 Source Selector", "SRCBO", "SRCB"},
 	{"SDTO3 Source Selector", "SRCCO", "SRCC"},
 	{"SDTO3 Source Selector", "SRCDO", "SRCD"},
-	{"SDTO3 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SDTO3 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SDTO3 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SDTO3 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SDTO3 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SDTO3 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SDTO3 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SDTO3 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SDTO3 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SDTO3 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SDTO3 Source Selector", "VADO", "VAD"},
 	{"SDTO3 Source Selector", "SBI1", "SLIM RX1"},
 	{"SDTO3 Source Selector", "SBI1", "SLIM RX2"},
@@ -4488,10 +4289,6 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO3 Source Selector", "SBI2", "SLIM RX4"},
 	{"SDTO3 Source Selector", "SBI3", "SLIM RX5"},
 	{"SDTO3 Source Selector", "SBI3", "SLIM RX6"},
-	{"SDTO3 Source Selector", "SDTI1A", "AIF1 SDTIA"},
-	{"SDTO3 Source Selector", "SDTI1B", "AIF1 SDTIB"},
-	{"SDTO3 Source Selector", "SDTI2", "AIF2 SDTI"},
-	{"SDTO3 Source Selector", "SDTI4", "AIF4 SDTI"},
 
 	{"SDTO4 Source Selector", "ADC1", "MIC1L Selector"},
 	{"SDTO4 Source Selector", "ADC1", "MIC1R Selector"},
@@ -4503,11 +4300,11 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO4 Source Selector", "SRCBO", "SRCB"},
 	{"SDTO4 Source Selector", "SRCCO", "SRCC"},
 	{"SDTO4 Source Selector", "SRCDO", "SRCD"},
-	{"SDTO4 Source Selector", "DSPO1", "DSPO1 Mixer"},
-	{"SDTO4 Source Selector", "DSPO2", "DSPO2 Mixer"},
-	{"SDTO4 Source Selector", "DSPO3", "DSPO3 Mixer"},
-	{"SDTO4 Source Selector", "DSPO4", "DSPO4 Mixer"},
-	{"SDTO4 Source Selector", "DSPO5", "DSPO5 Mixer"},
+	{"SDTO4 Source Selector", "DSPO1", "DSPO1 Selector"},
+	{"SDTO4 Source Selector", "DSPO2", "DSPO2 Selector"},
+	{"SDTO4 Source Selector", "DSPO3", "DSPO3 Selector"},
+	{"SDTO4 Source Selector", "DSPO4", "DSPO4 Selector"},
+	{"SDTO4 Source Selector", "DSPO5", "DSPO5 Selector"},
 	{"SDTO4 Source Selector", "VADO", "VAD"},
 	{"SDTO4 Source Selector", "SBI1", "SLIM RX1"},
 	{"SDTO4 Source Selector", "SBI1", "SLIM RX2"},
@@ -4515,10 +4312,6 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"SDTO4 Source Selector", "SBI2", "SLIM RX4"},
 	{"SDTO4 Source Selector", "SBI3", "SLIM RX5"},
 	{"SDTO4 Source Selector", "SBI3", "SLIM RX6"},
-	{"SDTO4 Source Selector", "SDTI1A", "AIF1 SDTIA"},
-	{"SDTO4 Source Selector", "SDTI1B", "AIF1 SDTIB"},
-	{"SDTO4 Source Selector", "SDTI2", "AIF2 SDTI"},
-	{"SDTO4 Source Selector", "SDTI3", "AIF3 SDTI"},
 
 	{"DAC1 Source Selector", "SDTI1A", "AIF1 SDTIA"},
 	{"DAC1 Source Selector", "SDTI1B", "AIF1 SDTIB"},
@@ -4563,7 +4356,7 @@ static const struct snd_soc_dapm_route audio_i2s_map[] = {
 	{"MIXBI2 Source Selector", "SDTI1A", "AIF1 SDTIA"},
 	{"MIXBI2 Source Selector", "SDTI1B", "AIF1 SDTIB"},
 	{"MIXBI2 Source Selector", "SDTI1C", "AIF1 SDTIC"},
-	{"MIXBI2 Source Selector", "SDTI1D", "AIF1 SDTID"},
+	{"MIXBI3 Source Selector", "SDTI1D", "AIF1 SDTID"},
 	{"MIXBI2 Source Selector", "SDTI2", "AIF2 SDTI"},
 	{"MIXBI2 Source Selector", "SDTI3", "AIF3 SDTI"},
 	{"MIXBI2 Source Selector", "SDTI4", "AIF4 SDTI"},
@@ -4698,122 +4491,254 @@ static int last_report_key;
 static int last_report_sw;
 static int mic_det_counter;
 
-#ifdef CONFIG_FSA8069
-extern void fsa8069_reset_enable(void);
+static irqreturn_t ak4961_jde_irq(int irq, void *data);
+static irqreturn_t ak4961_rce_irq(int irq, void *data);
+static irqreturn_t ak4961_vad_irq(int irq, void *data);
+
+int ak4961_hs_detect(struct snd_soc_codec *codec,
+		    const struct ak4961_mbhc_config *cfg)
+{
+	struct ak4961_priv *ak4961;
+	int rc = 0;
+
+	if (!codec) {
+		pr_err("Error: no codec\n");
+		return -EINVAL;
+	}
+
+	switch (cfg->mclk_rate) {
+	case AK4961_MCLK_RATE_12288KHZ:
+		snd_soc_update_bits(codec, PLL1_SOURCE_SELECTOR, 0x1F, 0x04);
+		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_H8, 0xFF, 0x00);
+		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_L8, 0xFF, 0x03);
+		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_H8, 0xFF, 0x00);
+		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_L8, 0xFF, 0x27);
+		pr_debug("MCLK: clock rate using %dHz\n", cfg->mclk_rate);
+		break;
+	case AK4961_MCLK_RATE_9600KHZ:
+		snd_soc_update_bits(codec, PLL1_SOURCE_SELECTOR, 0x1F, 0x04);
+		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_H8, 0xFF, 0x00);
+		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_L8, 0xFF, 0x04);
+		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_H8, 0xFF, 0x00);
+		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_L8, 0xFF, 0x3F);
+		pr_debug("MCLK: clock rate using %dHz\n", cfg->mclk_rate);
+		break;
+	default:
+		pr_err("Error: unsupported clock rate %d\n", cfg->mclk_rate);
+		return -EINVAL;
+		break;
+	}
+
+	ak4961 = snd_soc_codec_get_drvdata(codec);
+	ak4961->mbhc_cfg = *cfg;
+
+#ifdef CONFIG_SWITCH
+	ak4961->mbhc_cfg.h2w_sdev = kzalloc(sizeof(struct switch_dev), GFP_KERNEL);
+	ak4961->mbhc_cfg.h2w_sdev->name = "h2w";
+	ak4961->mbhc_cfg.h2w_sdev->print_name = headset_print_name;
+	rc = switch_dev_register(ak4961->mbhc_cfg.h2w_sdev);
+	if (rc < 0) {
+		pr_err("%d: Error in switch_dev_register\n", rc);
+		goto error_switch_register;
+	}
+
+	ak4961->mbhc_cfg.btn_idev = input_allocate_device();
+	memcpy(ak4961->mbhc_cfg.keycode, ak4961_keycode,
+			sizeof(ak4961->mbhc_cfg.keycode));
+
+	ak4961->mbhc_cfg.btn_idev->name = "hs_detect";
+	ak4961->mbhc_cfg.btn_idev->id.vendor = 0x0001;
+	ak4961->mbhc_cfg.btn_idev->id.product = 1;
+	ak4961->mbhc_cfg.btn_idev->id.version = 1;
+	ak4961->mbhc_cfg.btn_idev->keycode = ak4961->mbhc_cfg.keycode;
+	ak4961->mbhc_cfg.btn_idev->keycodesize = sizeof(unsigned short);
+	ak4961->mbhc_cfg.btn_idev->keycodemax = ARRAY_SIZE(ak4961->mbhc_cfg.keycode);
+
+	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_KEY, KEY_MEDIA);
+	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_KEY, KEY_VOLUMEUP);
+	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_KEY, KEY_VOLUMEDOWN);
+	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_MSC, MSC_SCAN);
+	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_SW, SW_HEADPHONE_INSERT);
+	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_SW, SW_MICROPHONE_INSERT);
+
+	rc = input_register_device(ak4961->mbhc_cfg.btn_idev);
+	if (rc != 0) {
+		pr_err("%d: Error in input_register_device\n", rc);
+		goto error_input_register;
+	}
 #endif
+
+	rc = ak49xx_request_irq(codec->control_data, AK4961_IRQ_JDE,
+		ak4961_jde_irq, "Headset detect", ak4961);
+	if (rc) {
+		pr_err("%s: Failed to request irq %d\n", __func__,
+			AK4961_IRQ_JDE);
+		goto err_jde_irq;
+	}
+
+	rc = ak49xx_request_irq(codec->control_data, AK4961_IRQ_RCE,
+		ak4961_rce_irq, "Button detect", ak4961);
+	if (rc) {
+		pr_err("%s: Failed to request irq %d\n", __func__,
+			AK4961_IRQ_RCE);
+		goto err_rce_irq;
+	}
+
+	rc = ak49xx_request_irq(codec->control_data, AK4961_IRQ_VAD,
+		ak4961_vad_irq, "Voice active detect", ak4961);
+	if (rc) {
+		pr_err("%s: Failed to request irq %d\n", __func__,
+			AK4961_IRQ_VAD);
+		goto err_vad_irq;
+	}
+
+	return rc;
+
+err_vad_irq:
+	ak49xx_free_irq(codec->control_data, AK4961_IRQ_RCE, ak4961);
+
+err_rce_irq:
+	ak49xx_free_irq(codec->control_data, AK4961_IRQ_JDE, ak4961);
+
+err_jde_irq:
+
+#ifdef CONFIG_SWITCH
+error_input_register:
+	if (ak4961->mbhc_cfg.h2w_sdev != NULL) {
+		switch_dev_unregister(ak4961->mbhc_cfg.h2w_sdev);
+		kfree(ak4961->mbhc_cfg.h2w_sdev);
+		ak4961->mbhc_cfg.h2w_sdev = NULL;
+	}
+error_switch_register:
+#endif
+	return rc;
+}
+EXPORT_SYMBOL_GPL(ak4961_hs_detect);
+
 static irqreturn_t ak4961_jde_irq(int irq, void *data)
 {
 	struct ak4961_priv *priv = data;
 	struct snd_soc_codec *codec = priv->codec;
 	int val, val1;
 	int report = last_report_sw;
-#ifdef CONFIG_FSA8069
+#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
     int val_hp = 0;
 #endif
 
-	val = snd_soc_read(codec, JACK_DETECTION_STATUS);
-	if (val < 0) {
-		snd_soc_write(codec, DETECTION_EVENT_RESET, 0x01);
-		dev_err(codec->dev, "Failed to read JACK_DETECTION_STATUS: %d\n",
-			val);
+
+    val = snd_soc_read(codec, JACK_DETECTION_STATUS);
+    if (val < 0) {
+        snd_soc_write(codec, DETECTION_EVENT_RESET, 0x01);
+        dev_err(codec->dev, "Failed to read JACK_DETECTION_STATUS: %d\n",
+                val);
 		return IRQ_HANDLED;
-	}
+    }
 
-	if (val & 0x02) {
-
-		if (val & 0x80) {
+    if (val & 0x02) {
+        if (val & 0x80) {
 #ifdef CONFIG_SWITCH
-			report = BIT_HEADSET;
-			input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 1);
-			input_report_switch(priv->mbhc_cfg.btn_idev, SW_MICROPHONE_INSERT, 1);
-			input_sync(priv->mbhc_cfg.btn_idev);
+            report = BIT_HEADSET;
+            input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 1);
+            input_report_switch(priv->mbhc_cfg.btn_idev, SW_MICROPHONE_INSERT, 1);
+            input_sync(priv->mbhc_cfg.btn_idev);
 #else
-			report = SND_JACK_HEADSET;
+            report = SND_JACK_HEADSET;
 #endif
-			snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x48, 0x40);
-#ifdef CONFIG_FSA8069
+            snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x48, 0x40);
+#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
             // Set HP output Gnd
             snd_soc_update_bits(codec, OUTPUT_MODE_SETTING, 0x03, 0x00);
 #endif
-			
-		} else {
-			val1 = snd_soc_read(codec, DETECTION_POWER_MANAGEMENT);
-			if ((val1 & 0x08) == 0) {
+
+
+        } else {
+            val1 = snd_soc_read(codec, DETECTION_POWER_MANAGEMENT);
+            if ((val1 & 0x08) == 0) {
                 // This is the first time to detect jack.
-				snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x08, 0x08);
-				mic_det_counter = 0;
-#ifdef CONFIG_FSA8069
-                pr_debug("%s:Turn FSA8069 on and wait for it == \n",__func__);
-                fsa8069_reset_enable();
+                snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x08, 0x08);
+                mic_det_counter = 0;
+#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
+                pr_debug("Turn FSA8049 on and wait for it == \n");
                 // Turn FSA8049 on and wait for it.
                 // Set HP output Hi-Z
-                val_hp = snd_soc_read(codec,POWER_MANAGEMENT_9);
-                pr_debug("%s:val_hp ======== %x\n",__func__,val_hp);
-                snd_soc_update_bits(codec, OUTPUT_MODE_SETTING, 0x03, 0x03);
-                pr_debug("%s:HP PA Off to detect headset\n",__func__);
-                snd_soc_update_bits(codec,POWER_MANAGEMENT_9,0x03,0x00);
-                // sleep 500ms to let the fsa8069 to detect the impedance
-                msleep(500);
-                snd_soc_write(codec,POWER_MANAGEMENT_9,val_hp);
-                val_hp = snd_soc_read(codec,POWER_MANAGEMENT_9);
-                pr_debug("%s:val_hp ======== %x\n",__func__,val_hp);
+                if(priv->mbhc_cfg.sw_gpio) {
+                    val_hp = snd_soc_read(codec,POWER_MANAGEMENT_9);
+                    pr_debug("val_hp ======== %x\n",val_hp);
+                    snd_soc_update_bits(codec, OUTPUT_MODE_SETTING, 0x03, 0x03);
+                    pr_debug("HP PA Off to detect headset\n");
+                    snd_soc_update_bits(codec,POWER_MANAGEMENT_9,0x03,0x00);
+                    msleep(200);
+                    gpio_direction_output(priv->mbhc_cfg.sw_gpio,1);
+                    pr_debug("FSA8049 gpio %d, value is %d\n",priv->mbhc_cfg.sw_gpio,
+                            gpio_get_value(priv->mbhc_cfg.sw_gpio));
+                    msleep(100);
+                    snd_soc_write(codec,POWER_MANAGEMENT_9,val_hp);
+                    val_hp = snd_soc_read(codec,POWER_MANAGEMENT_9);
+                    pr_debug("val_hp ======== %x\n",val_hp);
+                }
 #endif
-			} else {
-				if (mic_det_counter == MAX_MIC_DET_TRY) {
+            } else {
+                if (mic_det_counter == MAX_MIC_DET_TRY) {
 #ifdef CONFIG_SWITCH
-					report = BIT_HEADSET_NO_MIC;
-					input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 1);
-					input_sync(priv->mbhc_cfg.btn_idev);
+                    report = BIT_HEADSET_NO_MIC;
+                    input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 1);
+                    input_sync(priv->mbhc_cfg.btn_idev);
 #else
-					report = SND_JACK_HEADPHONE;
+                    report = SND_JACK_HEADPHONE;
 #endif
-					snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x08, 0x00);
-#ifdef CONFIG_FSA8069
+                    snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x08, 0x00);
+#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
                     // Set HP output Gnd
                     snd_soc_update_bits(codec, OUTPUT_MODE_SETTING, 0x03, 0x00);
 #endif
-				} else {
-					if (mic_det_counter == (MAX_MIC_DET_TRY >> 1)) {
-						if (priv->mbhc_cfg.swap_gnd_mic) {
-							priv->mbhc_cfg.swap_gnd_mic(codec);
-						}
-					}
-					mic_det_counter++;
-				}
-			}
-		}
-	} else {
-		snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x48, 0x00);
-		report = 0;
+                } else {
+                    if (mic_det_counter == (MAX_MIC_DET_TRY >> 1)) {
+                        if (priv->mbhc_cfg.swap_gnd_mic) {
+                            priv->mbhc_cfg.swap_gnd_mic(codec);
+                        }
+                    }
+                    mic_det_counter++;
+                }
+            }
+        }
+    } else {
+        snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x48, 0x00);
+        report = 0;
 #ifdef CONFIG_SWITCH
-		if (last_report_sw) {
-			input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 0);
-		}
-		if (last_report_sw == BIT_HEADSET) {
-			input_report_switch(priv->mbhc_cfg.btn_idev, SW_MICROPHONE_INSERT, 0);
-		}
-		if (last_report_key) {
-			input_report_key(priv->mbhc_cfg.btn_idev, last_report_key, 0);
-			last_report_key = 0;
-		}
-		input_sync(priv->mbhc_cfg.btn_idev);
+        if (last_report_sw) {
+            input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 0);
+        }
+        if (last_report_sw == BIT_HEADSET) {
+            input_report_switch(priv->mbhc_cfg.btn_idev, SW_MICROPHONE_INSERT, 0);
+        }
+        if (last_report_key) {
+            input_report_key(priv->mbhc_cfg.btn_idev, last_report_key, 0);
+            last_report_key = 0;
+        }
+        input_sync(priv->mbhc_cfg.btn_idev);
 #endif
-#ifdef CONFIG_FSA8069
+#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
+        pr_debug("Turn OFF FSA8049 == ====\n");
+        // Turn FSA8049 on and wait for it.
+        // Turn FSA8049 off.
+        if(priv->mbhc_cfg.sw_gpio) {
+            gpio_direction_output(priv->mbhc_cfg.sw_gpio,0);
+            pr_debug("Shut down the gpio value %d ===\n",gpio_get_value(priv->mbhc_cfg.sw_gpio));
+            // Set HP output Gnd
             snd_soc_update_bits(codec, OUTPUT_MODE_SETTING, 0x03, 0x00);
+        }
 #endif
-	}
-	
-	if (report != last_report_sw) {
+    }
+    if (report != last_report_sw) {
 #ifdef CONFIG_SWITCH
-		switch_set_state(priv->mbhc_cfg.h2w_sdev, report);
+        switch_set_state(priv->mbhc_cfg.h2w_sdev, report);
 #else
-		snd_soc_jack_report(priv->mbhc_cfg.headset_jack, report,
-				    SND_JACK_HEADSET);
+        snd_soc_jack_report(priv->mbhc_cfg.headset_jack, report,
+                SND_JACK_HEADSET);
 #endif		
-		last_report_sw = report;
-		dev_info(codec->dev, "%s: report %d\n", __func__, report);
-	}
-
+        last_report_sw = report;
+        dev_info(codec->dev, "%s: report %d\n", __func__, report);
+    }
 	snd_soc_write(codec, DETECTION_EVENT_RESET, 0x01);
 	return IRQ_HANDLED;
 }
@@ -4918,43 +4843,6 @@ static irqreturn_t ak4961_rce_irq(int irq, void *data)
 #endif
 
 	snd_soc_write(codec, DETECTION_EVENT_RESET, 0x01);
-
-	val = snd_soc_read(codec, JACK_DETECTION_STATUS);
-	if (val < 0) {
-		dev_err(codec->dev, "Failed to read JACK_DETECTION_STATUS: %d\n",
-				val);
-		return IRQ_HANDLED;
-	}
-
-    if ((val & 0x02) == 0) {
-        snd_soc_update_bits(codec, DETECTION_POWER_MANAGEMENT, 0x48, 0x00);
-        report = 0;
-#ifdef CONFIG_SWITCH
-        if (last_report_sw) {
-            input_report_switch(priv->mbhc_cfg.btn_idev, SW_HEADPHONE_INSERT, 0);
-        }
-        if (last_report_sw == BIT_HEADSET) {
-            input_report_switch(priv->mbhc_cfg.btn_idev, SW_MICROPHONE_INSERT, 0);
-        }
-        if (last_report_key) {
-            input_report_key(priv->mbhc_cfg.btn_idev, last_report_key, 0);
-            last_report_key = 0;
-        }
-        input_sync(priv->mbhc_cfg.btn_idev);
-#endif
-
-        if (report != last_report_sw) {
-#ifdef CONFIG_SWITCH
-            switch_set_state(priv->mbhc_cfg.h2w_sdev, report);
-#else
-            snd_soc_jack_report(priv->mbhc_cfg.headset_jack, report,
-                    SND_JACK_HEADSET);
-#endif
-            last_report_sw = report;
-            dev_info(codec->dev, "%s: report %d\n", __func__, report);
-        }
-    }
-
 	return IRQ_HANDLED;
 }
 
@@ -4980,130 +4868,6 @@ static irqreturn_t ak4961_vad_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-int ak4961_hs_detect(struct snd_soc_codec *codec,
-		    const struct ak4961_mbhc_config *cfg)
-{
-	struct ak4961_priv *ak4961;
-	struct ak49xx *ak49xx = codec->control_data;
-	struct ak49xx_core_resource *core_res = &ak49xx->core_res;
-	int rc = 0;
-
-	if (!codec) {
-		pr_err("Error: no codec\n");
-		return -EINVAL;
-	}
-
-	switch (cfg->mclk_rate) {
-	case AK4961_MCLK_RATE_12288KHZ:
-		snd_soc_update_bits(codec, PLL1_SOURCE_SELECTOR, 0x1F, 0x04);
-		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_H8, 0xFF, 0x00);
-		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_L8, 0xFF, 0x03);
-		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_H8, 0xFF, 0x00);
-		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_L8, 0xFF, 0x27);
-		pr_debug("MCLK: clock rate using %dHz\n", cfg->mclk_rate);
-		break;
-	case AK4961_MCLK_RATE_9600KHZ:
-		snd_soc_update_bits(codec, PLL1_SOURCE_SELECTOR, 0x1F, 0x04);
-		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_H8, 0xFF, 0x00);
-		snd_soc_update_bits(codec, PLL1_REF_DIVISOR_L8, 0xFF, 0x04);
-		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_H8, 0xFF, 0x00);
-		snd_soc_update_bits(codec, PLL1_FB_DIVISOR_L8, 0xFF, 0x3F);
-		pr_debug("MCLK: clock rate using %dHz\n", cfg->mclk_rate);
-		break;
-	default:
-		pr_err("Error: unsupported clock rate %d\n", cfg->mclk_rate);
-		return -EINVAL;
-		break;
-	}
-
-	ak4961 = snd_soc_codec_get_drvdata(codec);
-	ak4961->mbhc_cfg = *cfg;
-
-#ifdef CONFIG_SWITCH
-	ak4961->mbhc_cfg.h2w_sdev = kzalloc(sizeof(struct switch_dev), GFP_KERNEL);
-	ak4961->mbhc_cfg.h2w_sdev->name = "h2w";
-	ak4961->mbhc_cfg.h2w_sdev->print_name = headset_print_name;
-	rc = switch_dev_register(ak4961->mbhc_cfg.h2w_sdev);
-	if (rc < 0) {
-		pr_err("%d: Error in switch_dev_register\n", rc);
-		goto error_switch_register;
-	}
-
-	ak4961->mbhc_cfg.btn_idev = input_allocate_device();
-	memcpy(ak4961->mbhc_cfg.keycode, ak4961_keycode,
-			sizeof(ak4961->mbhc_cfg.keycode));
-
-	ak4961->mbhc_cfg.btn_idev->name = "hs_detect";
-	ak4961->mbhc_cfg.btn_idev->id.vendor = 0x0001;
-	ak4961->mbhc_cfg.btn_idev->id.product = 1;
-	ak4961->mbhc_cfg.btn_idev->id.version = 1;
-	ak4961->mbhc_cfg.btn_idev->keycode = ak4961->mbhc_cfg.keycode;
-	ak4961->mbhc_cfg.btn_idev->keycodesize = sizeof(unsigned short);
-	ak4961->mbhc_cfg.btn_idev->keycodemax = ARRAY_SIZE(ak4961->mbhc_cfg.keycode);
-
-	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_KEY, KEY_MEDIA);
-	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_KEY, KEY_VOLUMEUP);
-	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_KEY, KEY_VOLUMEDOWN);
-	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_MSC, MSC_SCAN);
-	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_SW, SW_HEADPHONE_INSERT);
-	input_set_capability(ak4961->mbhc_cfg.btn_idev, EV_SW, SW_MICROPHONE_INSERT);
-
-	rc = input_register_device(ak4961->mbhc_cfg.btn_idev);
-	if (rc != 0) {
-		pr_err("%d: Error in input_register_device\n", rc);
-		goto error_input_register;
-	} else {
-		goto request_virq;
-	}
-
-error_input_register:
-	if (ak4961->mbhc_cfg.h2w_sdev != NULL) {
-		switch_dev_unregister(ak4961->mbhc_cfg.h2w_sdev);
-		kfree(ak4961->mbhc_cfg.h2w_sdev);
-		ak4961->mbhc_cfg.h2w_sdev = NULL;
-	}
-error_switch_register:	
-	return rc;
-#endif
-
-request_virq:
-	rc = ak49xx_request_irq(core_res, AK4961_IRQ_JDE,
-		ak4961_jde_irq, "Headset detect", ak4961);
-	if (rc) {
-		pr_err("%s: Failed to request irq %d\n", __func__,
-			AK4961_IRQ_JDE);
-		goto err_jde_irq;
-	}
-
-	rc = ak49xx_request_irq(core_res, AK4961_IRQ_RCE,
-		ak4961_rce_irq, "Button detect", ak4961);
-	if (rc) {
-		pr_err("%s: Failed to request irq %d\n", __func__,
-			AK4961_IRQ_RCE);
-		goto err_rce_irq;
-	}
-
-	rc = ak49xx_request_irq(core_res, AK4961_IRQ_VAD,
-		ak4961_vad_irq, "Voice active detect", ak4961);
-	if (rc) {
-		pr_err("%s: Failed to request irq %d\n", __func__,
-			AK4961_IRQ_VAD);
-		goto err_vad_irq;
-	}
-
-	return rc;
-
-err_vad_irq:
-	ak49xx_free_irq(core_res, AK4961_IRQ_RCE, ak4961);
-
-err_rce_irq:
-	ak49xx_free_irq(core_res, AK4961_IRQ_JDE, ak4961);
-
-err_jde_irq:
-	return rc;
-}
-EXPORT_SYMBOL_GPL(ak4961_hs_detect);
-
 static const struct ak4961_reg_mask_val ak4961s_reg_defaults[] = {
 
 	/* Ak4961s changes */
@@ -5124,7 +4888,7 @@ static const struct ak4961_reg_mask_val ak4961_codec_reg_init_val[] = {
 	/* set Sync Domain 1 source: Tie Low */
 	{MSYNC1_MSN_CKS, 0x1F, 0x00},
 
-	/* set Sync Domain 2 source: PLLCLK1 */
+	/* set Sync Domain 2 source: PLLCLK1, Master Mode, 48kHz For Smart PA*/
 	{MSYNC2_MSN_CKS, 0x2F, 0x21},
 	{MSYNC2_BDV, 0xFF, 0x27},
 	{MSYNC2_SDV, 0xFF, 0x3F},
@@ -5179,16 +4943,14 @@ static const struct ak4961_reg_mask_val ak4961_codec_reg_init_val[] = {
 
 	/* set SRC Clock Mode -> 1/2 */
 	{SRC_CLK_SETTING, 0x07, 0x01},
-
 	/* set SRCE mode setting: short delay roll-off, semi-auto, x'tal */
 	{JITTER_CLEANER_SETTING_2, 0x3F, 0x22},
 	{JITTER_CLEANER_SETTING_3, 0xF0, 0x00},
 	
 	/* jack detection power on */
-	{DETECTION_POWER_MANAGEMENT, 0x82, 0x80},
+	{DETECTION_POWER_MANAGEMENT, 0x80, 0x80},
 	{DETECTION_SETTING_1, 0x3F, 0x23},
 	{DETECTION_SETTING_2, 0x07, 0x01},
-    {MODE_CONTROL,0x03,0x02},
 
 #ifdef CONFIG_VOICE_WAKEUP
 	{VAD_SETTING_2,  0xFF, 0x1F},
@@ -5329,20 +5091,21 @@ static int ak4961_post_reset_cb(struct ak49xx *ak49xx)
 	snd_soc_card_change_online_state(codec->card, 1);
 
 	mutex_lock(&codec->mutex);
+	if (codec->reg_def_copy) {
+		pr_debug("%s: Update ASOC cache", __func__);
+		kfree(codec->reg_cache);
+		codec->reg_cache = kmemdup(codec->reg_def_copy,
+						codec->reg_size, GFP_KERNEL);
+	}
 
 	ak4961_update_reg_defaults(codec);
 	ak4961_codec_init_reg(codec);
-
-	codec->cache_sync = true;
-	snd_soc_cache_sync(codec);
-	codec->cache_sync = false;
-
 	ret = ak4961_handle_pdata(ak4961);
 	if (IS_ERR_VALUE(ret))
 		pr_err("%s: bad pdata\n", __func__);
 
 	ak4961_init_slim_slave_cfg(codec);
-	
+
 	ak4961->machine_codec_event_cb(codec, AK49XX_CODEC_EVENT_CODEC_UP);
 
 	mutex_unlock(&codec->mutex);
@@ -5375,27 +5138,6 @@ static int ak49xx_ssr_register(struct ak49xx *control,
 	return 0;
 }
 
-static void ak4961_oram_ready(const struct firmware *fw, void *context)
-{
-	struct snd_soc_codec *codec = context;
-	struct ak4961_priv *ak4961 = snd_soc_codec_get_drvdata(codec);
-
-	if (!fw) {
-		dev_err(codec->dev, "ORAM firmware request failed\n");
-		ak4961->oram_firmware[ak4961->oram_load_index] = NULL;
-	} else {
-		ak4961->oram_firmware[ak4961->oram_load_index] = fw;
-		dev_dbg(codec->dev, "ORAM firmware request succeed\n");
-	}
-	ak4961->oram_load_index++;
-
-	if (ak4961->oram_load_index < AK4961_NUM_ORAM) {
-			request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-				AK4961_ORAM_FIRMWARES[ak4961->oram_load_index],
-				codec->dev, GFP_KERNEL, codec, ak4961_oram_ready);
-	}
-}
-
 static void ak4961_pram_ready(const struct firmware *fw, void *context)
 {
 	struct snd_soc_codec *codec = context;
@@ -5415,11 +5157,6 @@ static void ak4961_pram_ready(const struct firmware *fw, void *context)
 		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				AK4961_PRAM_FIRMWARES[ak4961->pram_load_index],
 				codec->dev, GFP_KERNEL, codec, ak4961_pram_ready);
-	}
-	else{
-			request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
-				AK4961_ORAM_FIRMWARES[ak4961->oram_load_index],
-				codec->dev, GFP_KERNEL, codec, ak4961_oram_ready);
 	}
 }
 
@@ -5448,13 +5185,6 @@ static void ak4961_cram_ready(const struct firmware *fw, void *context)
 				AK4961_PRAM_FIRMWARES[ak4961->pram_load_index],
 				codec->dev, GFP_KERNEL, codec, ak4961_pram_ready);
 	}
-}
-
-static void ak4961_timer(unsigned long data)
-{
-	struct ak4961_priv *ak4961 = (struct ak4961_priv *)data;
-
-	mod_timer(&ak4961->timer, jiffies + msecs_to_jiffies(SRC_RESET_TIMEOUT));
 }
 
 static int ak4961_codec_probe(struct snd_soc_codec *codec)
@@ -5502,13 +5232,12 @@ static int ak4961_codec_probe(struct snd_soc_codec *codec)
 	if (!ptr) {
 		pr_err("%s: no mem for slim chan ctl data\n", __func__);
 		ret = -ENOMEM;
-		goto err_nomem_slimch;
+		goto err_pdata;
 	}
 
 	if (ak4961->intf_type == AK49XX_INTERFACE_TYPE_SPI ||
-		ak4961->intf_type == AK49XX_INTERFACE_TYPE_I2C ||
-		ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS ||
-		ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+			ak4961->intf_type == AK49XX_INTERFACE_TYPE_I2C ||
+			ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 		snd_soc_dapm_new_controls(dapm, ak4961_dapm_i2s_widgets,
 			ARRAY_SIZE(ak4961_dapm_i2s_widgets));
 		snd_soc_dapm_add_routes(dapm, audio_i2s_map,
@@ -5517,8 +5246,7 @@ static int ak4961_codec_probe(struct snd_soc_codec *codec)
 			INIT_LIST_HEAD(&ak4961->dai[i].ak49xx_ch_list);
 	}
 
-	if (ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS ||
-		ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	if (ak4961->intf_type == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 		for (i = 0; i < NUM_CODEC_DAIS; i++) {
 			INIT_LIST_HEAD(&ak4961->dai[i].ak49xx_ch_list);
 			init_waitqueue_head(&ak4961->dai[i].dai_wait);
@@ -5541,7 +5269,31 @@ static int ak4961_codec_probe(struct snd_soc_codec *codec)
 
 	snd_soc_dapm_sync(dapm);
 
-	ak4961->stream_state = AK4961_SLIMBUS_STREAM_NA;
+#if 0
+	ret = ak49xx_request_irq(codec->control_data, AK4961_IRQ_JDE,
+		ak4961_jde_irq, "Headset detect", ak4961);
+	if (ret) {
+		pr_err("%s: Failed to request irq %d\n", __func__,
+			AK4961_IRQ_JDE);
+		goto err_jde_irq;
+	}
+
+	ret = ak49xx_request_irq(codec->control_data, AK4961_IRQ_RCE,
+		ak4961_rce_irq, "Button detect", ak4961);
+	if (ret) {
+		pr_err("%s: Failed to request irq %d\n", __func__,
+			AK4961_IRQ_RCE);
+		goto err_rce_irq;
+	}
+
+	ret = ak49xx_request_irq(codec->control_data, AK4961_IRQ_VAD,
+		ak4961_vad_irq, "Voice active detect", ak4961);
+	if (ret) {
+		pr_err("%s: Failed to request irq %d\n", __func__,
+			AK4961_IRQ_VAD);
+		goto err_vad_irq;
+	}
+#endif
 
 	ak4961->workqueue = create_singlethread_workqueue("ak4961_wq");
 	if (ak4961->workqueue == NULL) {
@@ -5549,17 +5301,12 @@ static int ak4961_codec_probe(struct snd_soc_codec *codec)
 	}
 	INIT_WORK(&ak4961->work, ak4961_work);
 
-	init_timer(&ak4961->timer);
-	ak4961->timer.data = (unsigned long)ak4961;
-	ak4961->timer.function = ak4961_timer;
-
 #ifdef CONFIG_DEBUG_FS_CODEC
 	debugak49xx = control;
 #endif
 
 	ak4961->cram_load_index = 0;
 	ak4961->pram_load_index = 0;
-	ak4961->oram_load_index = 0;
 
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 			AK4961_CRAM_FIRMWARES[0], codec->dev, GFP_KERNEL,
@@ -5569,10 +5316,20 @@ static int ak4961_codec_probe(struct snd_soc_codec *codec)
 	return ret;
 
 err_wk_irq:
-err_pdata:	
-	kfree(ptr);
+#if 0
+	ak49xx_free_irq(codec->control_data, AK4961_IRQ_VAD, ak4961);
 
-err_nomem_slimch:
+err_vad_irq:
+	ak49xx_free_irq(codec->control_data, AK4961_IRQ_RCE, ak4961);
+
+err_rce_irq:
+	ak49xx_free_irq(codec->control_data, AK4961_IRQ_JDE, ak4961);
+
+err_jde_irq:
+	kfree(ptr);
+#endif
+
+err_pdata:
 	kfree(ak4961);
 
 	return ret;
@@ -5605,7 +5362,6 @@ static int ak4961_codec_remove(struct snd_soc_codec *codec)
 	ak49xx_free_irq(codec->control_data, AK4961_IRQ_RCE, ak4961);
 	ak49xx_free_irq(codec->control_data, AK4961_IRQ_VAD, ak4961);
 	destroy_workqueue(ak4961->workqueue);
-	del_timer_sync(&ak4961->timer);
 	kfree(ak4961);
 	return 0;
 }
@@ -5628,7 +5384,6 @@ static int ak4961_write(struct snd_soc_codec *codec, unsigned int reg,
 	unsigned int value)
 {
 	int ret;
-	struct ak49xx *control = codec->control_data;
 
 	if (reg == SND_SOC_NOPM)
 		return 0;
@@ -5642,7 +5397,7 @@ static int ak4961_write(struct snd_soc_codec *codec, unsigned int reg,
 				reg, ret);
 	}
 
-	return ak49xx_reg_write(&control->core_res, reg, value);
+	return ak49xx_reg_write(codec->control_data, reg, value);
 }
 
 static unsigned int ak4961_read(struct snd_soc_codec *codec,
@@ -5650,7 +5405,6 @@ static unsigned int ak4961_read(struct snd_soc_codec *codec,
 {
 	unsigned int val;
 	int ret;
-	struct ak49xx *control = codec->control_data;
 
 	if (reg == SND_SOC_NOPM)
 		return 0;
@@ -5667,7 +5421,7 @@ static unsigned int ak4961_read(struct snd_soc_codec *codec,
 				reg, ret);
 	}
 
-	val = ak49xx_reg_read(&control->core_res, reg);
+	val = ak49xx_reg_read(codec->control_data, reg);
 	return val;
 }
 
@@ -5706,17 +5460,14 @@ static int ak4961_set_bias_level(struct snd_soc_codec *codec,
 static struct snd_soc_codec_driver soc_codec_dev_ak4961 = {
 	.probe	= ak4961_codec_probe,
 	.remove	= ak4961_codec_remove,
-
 	.read = ak4961_read,
 	.write = ak4961_write,
-
 	.readable_register = ak4961_readable,
 	.volatile_register = ak4961_volatile,
 
 	.reg_cache_size = AK4961_CACHE_SIZE,
 	.reg_cache_default = ak4961_reg_defaults,
 	.reg_word_size = 1,
-
 	.controls = ak4961_snd_controls,
 	.num_controls = ARRAY_SIZE(ak4961_snd_controls),
 	.dapm_widgets = ak4961_dapm_widgets,
@@ -5748,7 +5499,7 @@ static const struct dev_pm_ops ak4961_pm_ops = {
 };
 #endif
 
-static int ak4961_probe(struct platform_device *pdev)
+static int __devinit ak4961_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	pr_info("ak4961_probe\n");
@@ -5772,8 +5523,7 @@ static int ak4961_probe(struct platform_device *pdev)
 	}
 #endif
 
-	if (ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SLIMBUS ||
-		ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	if (ak49xx_get_intf_type() == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 		pr_info("ak4961_probe: register SLIMbus dai\n");
 		ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_ak4961,
 			ak4961_dai, ARRAY_SIZE(ak4961_dai));
@@ -5786,7 +5536,7 @@ static int ak4961_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int ak4961_remove(struct platform_device *pdev)
+static int __devexit ak4961_remove(struct platform_device *pdev)
 {
 #ifdef CONFIG_DEBUG_FS_CODEC
 	device_remove_file(&pdev->dev, &dev_attr_reg_data);

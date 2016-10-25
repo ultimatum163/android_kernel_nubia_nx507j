@@ -76,33 +76,31 @@
 #define PROX_DATA_SAFE_RANGE_MIN            (PROX_DATA_TARGET*2 - 10)
 #define PROX_DATA_SAFE_RANGE_MAX            (PROX_DATA_TARGET*2 + 40)
 #define PROX_OFFSET_CAL_GETDATA_DELAY       10
+#define PROX_OFFSET_CAL_PER_BIT             100 / (15 * PROX_LED_PULSE_CNT)
 #define PROX_DEFAULT_THRESHOLD_HIGH         150
 #define PROX_DEFAULT_THRESHOLD_LOW          PROX_DEFAULT_THRESHOLD_HIGH - PROX_THRESHOLD_DISTANCE
 #define PROX_THRESHOLD_HIGH_MAX             200
-#define PROX_THRESHOLD_HIGH_MIN             130
-#define PROX_THRESHOLD_SAFE_DISTANCE        90
+#define PROX_THRESHOLD_SAFE_DISTANCE        PROX_THRESHOLD_DISTANCE / 2
 #define PROX_DEFAULT_OFFSET_NE              0
 #define PROX_DEFAULT_OFFSET_SW              0
-#define PROX_OFFSET_CAL_MANUAL_ADD          0x05
-
 
 
 #define GESTURE_LED_PULSE_CNT               4
 #define GESTURE_DATA_TARGET                 20
 #define GESTURE_DATA_MAX                    255
-#define GESTURE_OFFSET_CAL_BUFFER_SIZE      30
-#define GESTURE_OFFSET_CAL_THRESHOLD        200
+#define GESTURE_OFFSET_CAL_BUFFER_SIZE      60
+#define GESTURE_OFFSET_CAL_THRESHOLD        150
 #define GESTURE_OFFSET_CAL_ABILITY_MAX      127
 #define GESTURE_DATA_SAFE_RANGE_MIN         (GESTURE_DATA_TARGET - 10)
-#define GESTURE_DATA_SAFE_RANGE_MAX         (GESTURE_DATA_TARGET + 20)
+#define GESTURE_DATA_SAFE_RANGE_MAX         (GESTURE_DATA_TARGET + 10)
 #define GESTURE_OFFSET_CAL_GETDATA_DELAY    10
+#define GESTURE_OFFSET_CAL_PER_BIT          100 / (30 * GESTURE_LED_PULSE_CNT)
 #define GESTURE_DEFAULT_OFFSET_N            30
 #define GESTURE_DEFAULT_OFFSET_S            0
 #define GESTURE_DEFAULT_OFFSET_W            0
 #define GESTURE_DEFAULT_OFFSET_E            0
 #define GESTURE_ENTER_THRESHOLD             0
 #define GESTURE_EXIT_THRESHOLD              0
-#define GESTURE_OFFSET_CAL_MANUAL_ADD       0x02
 
 
 #define TMG399X_CMD_IRBEAM_INT_CLR	0xE3
@@ -460,27 +458,17 @@ struct tmg399x_chip {
     int  light_poll_time;
     int  irq_pin_num;
 
-    int  light_percent;
-
     int  prox_calibrate_times;
     int  prox_thres_hi_max;
     int  prox_thres_hi_min;
     int  prox_data_safe_range_max;
     int  prox_data_safe_range_min;
     int  prox_data_max;
-    int  prox_offset_cal_per_bit;
-    int  prox_manual_calibrate_threshold;
-    int  prox_uncover_data;
-    int  prox_led_plus_cnt;
-    int  prox_offset_cal_ability;
-
-
     int  gesture_data_max;
     int  gesture_data_safe_range_max;
     int  gesture_data_safe_range_min;
-    int  gesture_offset_cal_per_bit;
-    int  gesture_offset_cal_ability;
-    int  gesture_led_plus_cnt;
+    int  prox_manual_calibrate_threshold;
+    int  prox_uncover_data;
 
 	bool unpowered;
 	bool als_enabled;
@@ -502,10 +490,7 @@ struct tmg399x_chip {
 	bool phone_is_sleep;
     bool prox_offset_cal_start;
     bool gesture_offset_cal_start;
-    bool gesture_offset_cal_pending;
     bool gesture_offset_cal_result;
-	bool prox_offset_cal_verify;
-	bool prox_calibrate_verify;
 
     char *chip_name;
 
@@ -535,8 +520,5 @@ struct tmg399x_i2c_platform_data {
 	struct lux_segment *segment;
 	int segment_num;
 };
-
-static int tmg399x_gesture_offset_cal(struct tmg399x_chip *chip);
-
 
 #endif /* __TMG399X_H */

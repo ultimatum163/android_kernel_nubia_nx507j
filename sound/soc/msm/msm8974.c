@@ -80,7 +80,7 @@ static int msm8974_auxpcm_rate = 8000;
 
 static void *adsp_state_notifier;
 
-#define ADSP_STATE_READY_TIMEOUT_MS 3000
+#define ADSP_STATE_READY_TIMEOUT_MS 50
 
 static inline int param_is_mask(int p)
 {
@@ -2946,6 +2946,8 @@ static __devinit int msm8974_asoc_machine_probe(struct platform_device *pdev)
 	struct resource	*pri_muxsel;
 	struct resource	*sec_muxsel;
 
+
+
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform supplied from device tree\n");
 		return -EINVAL;
@@ -3030,6 +3032,24 @@ static __devinit int msm8974_asoc_machine_probe(struct platform_device *pdev)
 			dev_dbg(&pdev->dev, "Unknown value, hence setting to default");
 		}
 	}
+
+// Add by wuzehui
+#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
+    if(mbhc_switch_enable_gpio == -1 ) {
+        mbhc_switch_enable_gpio = of_get_named_gpio(pdev->dev.of_node,
+                "qcom,mbhc-switch-enable-gpio", 0);
+        if(mbhc_switch_enable_gpio >= 0){
+            mbhc_cfg.sw_gpio = mbhc_switch_enable_gpio;
+            gpio_request(mbhc_cfg.sw_gpio, "headset");
+            gpio_direction_output(mbhc_cfg.sw_gpio,0);
+            pr_debug("headset switch gpio %d and set the value %d\n",
+                    mbhc_cfg.sw_gpio,gpio_get_value_cansleep(mbhc_cfg.sw_gpio));
+        } else
+            mbhc_cfg.sw_gpio = 0;
+        pr_debug("qcom,mbhc-switch-enable-gpio is %d\n",mbhc_cfg.sw_gpio);
+    }
+#endif
+// end by wuzehui
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,hdmi-audio-rx")) {
 		dev_info(&pdev->dev, "%s(): hdmi audio support present\n",
 				__func__);
@@ -3145,26 +3165,6 @@ static __devinit int msm8974_asoc_machine_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "msm8974_prepare_us_euro failed (%d)\n",
 			ret);
 
-// Add by wuzehui
-#ifdef CONFIG_ZTEMT_AUDIO_HEADSET_SW
-    if(mbhc_switch_enable_gpio == -1 ) {
-        mbhc_switch_enable_gpio = of_get_named_gpio(pdev->dev.of_node,
-                "qcom,mbhc-switch-enable-gpio", 0);
-        if(mbhc_switch_enable_gpio >= 0){
-            mbhc_cfg.sw_gpio = mbhc_switch_enable_gpio;
-            if(pdata->us_euro_gpio != mbhc_switch_enable_gpio) {
-                pr_debug("Not request again\n");
-                gpio_request(mbhc_cfg.sw_gpio, "headset");
-            }
-            gpio_direction_output(mbhc_cfg.sw_gpio,0);
-            pr_debug("headset switch gpio %d and set the value %d\n",
-                    mbhc_cfg.sw_gpio,gpio_get_value_cansleep(mbhc_cfg.sw_gpio));
-        } else
-            mbhc_cfg.sw_gpio = 0;
-        pr_debug("qcom,mbhc-switch-enable-gpio is %d\n",mbhc_cfg.sw_gpio);
-    }
-#endif
-// end by wuzehui
 	ret = of_property_read_string(pdev->dev.of_node,
 			"qcom,prim-auxpcm-gpio-set", &auxpcm_pri_gpio_set);
 	if (ret) {

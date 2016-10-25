@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -229,10 +229,10 @@ int ak49xx_cfg_slim_sch_rx(struct ak49xx *ak49xx,
 
 	list_for_each_entry(rx, ak49xx_ch_list, list) {
 		codec_port = rx->port;
-		pr_debug("%s: codec_port %d rx 0x%p, payload %d\n"
+		pr_debug("%s: codec_port %d rx 0x%x, payload %d\n"
 			 "sh_ch.rx_port_ch_reg_base0 0x%x\n"
 			 "sh_ch.port_rx_cfg_reg_base 0x%x\n",
-			 __func__, codec_port, rx, payload,
+			 __func__, codec_port, (u32)rx, payload,
 			 sh_ch.rx_port_ch_reg_base,
 			sh_ch.port_rx_cfg_reg_base);
 
@@ -323,12 +323,12 @@ int ak49xx_cfg_slim_sch_tx(struct ak49xx *ak49xx,
 		       __func__, ret);
 		goto err;
 	}
-
 	pr_debug("%s: ch_cnt[%d] rate[%d]\n", __func__, ch_cnt, rate);
+
 	list_for_each_entry(tx, ak49xx_ch_list, list) {
 		codec_port = tx->port;
-		pr_debug("%s: codec_port %d tx 0x%p, payload 0x%x\n",
-			 __func__, codec_port, tx, payload);
+		pr_debug("%s: codec_port %d rx 0x%x, payload 0x%x\n",
+			 __func__, codec_port, (u32)tx, payload);
 
 		/* write to interface device
 		ret = ak49xx_interface_reg_write(ak49xx,
@@ -499,38 +499,28 @@ EXPORT_SYMBOL_GPL(ak49xx_rx_vport_validation);
 
 
 /* This function is called with mutex acquired */
-int ak49xx_tx_vport_validation(u32 table, u32 port_id,
-				struct ak49xx_codec_dai_data *codec_dai,
-				u32 num_codec_dais)
+int ak49xx_tx_vport_validation(u32 vtable, u32 port_id,
+				struct ak49xx_codec_dai_data *codec_dai)
 {
 	struct ak49xx_ch *ch;
 	int ret = 0;
 	u32 index;
-	unsigned long vtable = table;
-	u32 size = sizeof(table) * BITS_PER_BYTE;
-
-	pr_debug("%s: vtable 0x%lx port_id %u size %d\n", __func__,
+	u32 size = sizeof(vtable) * 8;
+	pr_debug("%s: vtable 0x%x port_id %u size %d\n", __func__,
 		 vtable, port_id, size);
-	for_each_set_bit(index, &vtable, size) {
-		if (index < num_codec_dais) {
-			list_for_each_entry(ch,
-					&codec_dai[index].ak49xx_ch_list,
-					list) {
-				pr_debug("%s: index %u ch->port %u vtable 0x%lx\n",
-						__func__, index, ch->port,
-						vtable);
-				if (ch->port == port_id) {
-					pr_err("%s: TX%u is used by AIF%u_CAP Mixer\n",
-							__func__, port_id + 1,
-							(index + 1)/2);
-					ret = -EINVAL;
-					break;
-				}
+	for_each_set_bit(index, (unsigned long *)&vtable, size) {
+		list_for_each_entry(ch,
+				    &codec_dai[index].ak49xx_ch_list,
+				    list) {
+			pr_debug("%s: index %u ch->port %u vtable 0x%x\n",
+				 __func__, index, ch->port, vtable);
+			if (ch->port == port_id) {
+				pr_err("%s: TX%u is used by AIF%u_CAP Mixer\n",
+					__func__, port_id + 1,
+					(index + 1)/2);
+				ret = -EINVAL;
+				break;
 			}
-		} else {
-			pr_err("%s: Invalid index %d of codec dai",
-					__func__, index);
-			ret = -EINVAL;
 		}
 		if (ret)
 			break;

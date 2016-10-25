@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,6 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/ak49xx/ak49xx-slimslave.h>
 #include <linux/mfd/ak49xx/core.h>
-#include <linux/mfd/ak49xx/core-resource.h>
 #include <linux/mfd/ak49xx/pdata.h>
 #include <linux/mfd/ak49xx/ak496x_registers.h>
 #ifdef CONFIG_AK4960_CODEC
@@ -42,59 +41,13 @@
 #define SLIMBUS_PRESENT_TIMEOUT 100
 
 #define CODEC_DT_MAX_PROP_SIZE   40
-#define CONTROL_IF_SPI
-#ifdef CONTROL_IF_SPI
-struct ak49xx *ak49xx_slim_spi;
-#endif
-
-static int get_hw_version(void)
-{
-    int i = 0; //default is B
-    return i;
-}
-
-struct pinctrl_info {
-	struct pinctrl *pinctrl;
-	struct pinctrl_state *extncodec_sus;
-	struct pinctrl_state *extncodec_act;
-};
-
-static struct pinctrl_info pinctrl_info;
-int ak49xx_spi_read(struct ak49xx *ak49xx, unsigned short reg,int bytes, void *dest, bool interface_reg);
-int ak49xx_spi_write(struct ak49xx *ak49xx, unsigned short reg, int bytes, void *src, bool interface_reg);
-
-static int extcodec_get_pinctrl(struct device *dev)
-{
-	struct pinctrl *pinctrl;
-
-	pinctrl = pinctrl_get(dev);
-	if (IS_ERR(pinctrl)) {
-		pr_err("%s: Unable to get pinctrl handle\n", __func__);
-		return -EINVAL;
-	}
-	pinctrl_info.pinctrl = pinctrl;
-	/* get all the states handles from Device Tree */
-	pinctrl_info.extncodec_sus = pinctrl_lookup_state(pinctrl, "suspend");
-	if (IS_ERR(pinctrl_info.extncodec_sus)) {
-		pr_err("%s: Unable to get pinctrl disable state handle, err: %ld\n",
-				__func__, PTR_ERR(pinctrl_info.extncodec_sus));
-		return -EINVAL;
-	}
-	pinctrl_info.extncodec_act = pinctrl_lookup_state(pinctrl, "active");
-	if (IS_ERR(pinctrl_info.extncodec_act)) {
-		pr_err("%s: Unable to get pinctrl disable state handle, err: %ld\n",
-				__func__, PTR_ERR(pinctrl_info.extncodec_act));
-		return -EINVAL;
-	}
-	return 0;
-}
 
 static int ak49xx_dt_parse_vreg_info(struct device *dev,
 				      struct ak49xx_regulator *vreg,
 				      const char *vreg_name, bool ondemand);
 static struct ak49xx_pdata *ak49xx_populate_dt_pdata(struct device *dev);
 
-static int ak49xx_intf = AK49XX_INTERFACE_TYPE_PROBING;
+static int ak49xx_intf = -1;
 static struct spi_device *ak49xx_spi;
 
 static int ak49xx_read(struct ak49xx *ak49xx, unsigned short reg,
@@ -119,9 +72,7 @@ static int ak49xx_read(struct ak49xx *ak49xx, unsigned short reg,
 	return 0;
 }
 
-static int __ak49xx_reg_read(
-	struct ak49xx *ak49xx, 
-	unsigned short reg)
+int ak49xx_reg_read(struct ak49xx *ak49xx, unsigned short reg)
 {
 	u8 val;
 	int ret;
@@ -135,16 +86,7 @@ static int __ak49xx_reg_read(
 	else
 		return val;
 }
-
-int ak49xx_reg_read(
-	struct ak49xx_core_resource *core_res,
-	unsigned short reg)
-{
-	struct ak49xx *ak49xx = (struct ak49xx *) core_res->parent;
-	return __ak49xx_reg_read(ak49xx, reg);
-
-}
-EXPORT_SYMBOL(ak49xx_reg_read);
+EXPORT_SYMBOL_GPL(ak49xx_reg_read);
 
 static int ak49xx_write(struct ak49xx *ak49xx, unsigned short reg,
 			int bytes, void *src, bool interface_reg)
@@ -162,9 +104,8 @@ static int ak49xx_write(struct ak49xx *ak49xx, unsigned short reg,
 	return ak49xx->write_dev(ak49xx, reg, bytes, src, interface_reg);
 }
 
-static int __ak49xx_reg_write(
-	struct ak49xx *ak49xx, 
-	unsigned short reg, u8 val)
+int ak49xx_reg_write(struct ak49xx *ak49xx, unsigned short reg,
+		     u8 val)
 {
 	int ret;
 
@@ -174,15 +115,7 @@ static int __ak49xx_reg_write(
 
 	return ret;
 }
-
-int ak49xx_reg_write(
-	struct ak49xx_core_resource *core_res,
-	unsigned short reg, u8 val)
-{
-	struct ak49xx *ak49xx = (struct ak49xx *) core_res->parent;
-	return __ak49xx_reg_write(ak49xx, reg, val);
-}
-EXPORT_SYMBOL(ak49xx_reg_write);
+EXPORT_SYMBOL_GPL(ak49xx_reg_write);
 
 static u8 ak49xx_pgd_la;
 static u8 ak49xx_inf_la;
@@ -201,7 +134,7 @@ int ak49xx_interface_reg_read(struct ak49xx *ak49xx, unsigned short reg)
 	else
 		return val;
 }
-EXPORT_SYMBOL(ak49xx_interface_reg_read);
+EXPORT_SYMBOL_GPL(ak49xx_interface_reg_read);
 
 int ak49xx_interface_reg_write(struct ak49xx *ak49xx, unsigned short reg,
 		     u8 val)
@@ -214,19 +147,16 @@ int ak49xx_interface_reg_write(struct ak49xx *ak49xx, unsigned short reg,
 
 	return ret;
 }
-EXPORT_SYMBOL(ak49xx_interface_reg_write);
+EXPORT_SYMBOL_GPL(ak49xx_interface_reg_write);
 
-static int __ak49xx_bulk_read(
-	struct ak49xx *ak49xx, 
-	unsigned short reg,
-	int count, u8 *buf)
+int ak49xx_bulk_read(struct ak49xx *ak49xx, unsigned short reg,
+		     int count, u8 *buf)
 {
 	int ret;
 
 	mutex_lock(&ak49xx->io_lock);
 
-	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI ||
-		ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI) {
 		ret = ak49xx_read(ak49xx, reg, count, buf, false);
 	} else {
 		ret = -1;
@@ -236,27 +166,16 @@ static int __ak49xx_bulk_read(
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(ak49xx_bulk_read);
 
-int ak49xx_bulk_read(
-	struct ak49xx_core_resource *core_res,
-	unsigned short reg,
-	int count, u8 *buf)
-{
-	struct ak49xx *ak49xx =
-			(struct ak49xx *) core_res->parent;
-	return __ak49xx_bulk_read(ak49xx, reg, count, buf);
-}
-EXPORT_SYMBOL(ak49xx_bulk_read);
-
-static int __ak49xx_bulk_write(struct ak49xx *ak49xx, unsigned short reg,
+int ak49xx_bulk_write(struct ak49xx *ak49xx, unsigned short reg,
 		     int count, u8 *buf)
 {
 	int ret;
 
 	mutex_lock(&ak49xx->io_lock);
 
-	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI ||
-		ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI) {
 		ret = ak49xx_write(ak49xx, reg, count, buf, false);
 	} else {
 		ret = -1;
@@ -266,21 +185,13 @@ static int __ak49xx_bulk_write(struct ak49xx *ak49xx, unsigned short reg,
 
 	return ret;
 }
-
-int ak49xx_bulk_write(
-	struct ak49xx_core_resource *core_res,
-	unsigned short reg, int count, u8 *buf)
-{
-	struct ak49xx *ak49xx =
-			(struct ak49xx *) core_res->parent;
-	return __ak49xx_bulk_write(ak49xx, reg, count, buf);
-}
-EXPORT_SYMBOL(ak49xx_bulk_write);
+EXPORT_SYMBOL_GPL(ak49xx_bulk_write);
 
 int ak49xx_ram_write(struct ak49xx *ak49xx, u8 vat, u8 page,
 					 u16 start, int count, u8 *buf) {
 	int ret, i, addr, line;
 //	u8  prif;
+
 	mutex_lock(&ak49xx->io_lock);
 
 	ret = ak49xx_write(ak49xx, VIRTUAL_ADDRESS_CONTROL, 1, &vat, false);
@@ -311,8 +222,7 @@ int ak49xx_ram_write(struct ak49xx *ak49xx, u8 vat, u8 page,
 				pr_err("failed to write ram data in SLIMbus mode.\n");
 			}
 		}
-	} else if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI ||
-		ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	} else if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI) {
 
 		ret = spi_write(ak49xx_spi, buf, count);
 		if (ret) {
@@ -327,11 +237,12 @@ int ak49xx_ram_write(struct ak49xx *ak49xx, u8 vat, u8 page,
 
 	return ret;
 }
-EXPORT_SYMBOL(ak49xx_ram_write);
+EXPORT_SYMBOL_GPL(ak49xx_ram_write);
 
 int ak49xx_run_ram_write(struct ak49xx *ak49xx, u8 *buf) {
 	int i, ret = 0;
 	u8 runc = 0x01;
+
 	mutex_lock(&ak49xx->io_lock);
 
 	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS) {
@@ -347,11 +258,10 @@ int ak49xx_run_ram_write(struct ak49xx *ak49xx, u8 *buf) {
 		}
 		ret += ak49xx_write(ak49xx, CRAM_RUN_EXE, 1, &runc, false);
 
-	} else if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI ||
-			   ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
+	} else if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI) {
 
-		ret += spi_write(ak49xx_spi, buf, buf[3] * 3 + 9);
-		ret += ak49xx_write(ak49xx, CRAM_RUN_EXE, 1, &runc, false);
+		ret += spi_write(ak49xx_spi, buf, buf[0] * 3 + 9);
+		ret += ak49xx_write(ak49xx, 0xc8, 1, &runc, false);
 
 		if (ret) {
 			pr_err("failed to write ram data in SPI mode.\n");
@@ -365,7 +275,13 @@ int ak49xx_run_ram_write(struct ak49xx *ak49xx, u8 *buf) {
 
 	return ret;
 }
-EXPORT_SYMBOL(ak49xx_run_ram_write);
+EXPORT_SYMBOL_GPL(ak49xx_run_ram_write);
+
+int ak49xx_get_intf_type(void)
+{
+	return ak49xx_intf;
+}
+EXPORT_SYMBOL_GPL(ak49xx_get_intf_type);
 
 static int ak49xx_slim_read_device(struct ak49xx *ak49xx, unsigned short reg,
 				int bytes, void *dest, bool interface)
@@ -405,6 +321,7 @@ static int ak49xx_slim_read_device(struct ak49xx *ak49xx, unsigned short reg,
 	} else if (!interface) {
 		memcpy(dest, buf, (buf_size > bytes)? bytes : buf_size );
 	}
+
 	return ret;
 }
 /* Interface specifies whether the write is to the interface or general
@@ -419,6 +336,7 @@ static int ak49xx_slim_write_device(struct ak49xx *ak49xx,
 	u8 gd_buf[AK49XX_SLIM_SLICE_SIZE] = {0};
 	void *buf;
 	u8 buf_size;
+
 	msg.start_offset = AK49XX_REGISTER_START_OFFSET + reg;
 	if (interface) {
 		msg.num_bytes = bytes;
@@ -442,12 +360,12 @@ static int ak49xx_slim_write_device(struct ak49xx *ak49xx,
 			break;
 		usleep_range(5000, 5000);
 	}
+
 	if (ret)
 		pr_err("%s: Error, Codec write failed (%d)\n", __func__, ret);
 
 	return ret;
 }
-//#endif
 
 static int ak49xx_spi_read_device(unsigned short reg,
 			int bytes, void *dest)
@@ -455,6 +373,7 @@ static int ak49xx_spi_read_device(unsigned short reg,
 	u8 tx[3];
 	u8 *d = dest;
 	int ret;
+
 	tx[0] = 0x01;
 	tx[1] = reg >> 8;
 	tx[2] = reg & 0xFF;
@@ -471,6 +390,7 @@ static int ak49xx_spi_write_device(unsigned short reg,
 {
 	u8 tx[bytes + 3];
 	int ret;
+
 	tx[0] = 0x81;
 	tx[1] = reg >> 8;
 	tx[2] = reg & 0xFF;
@@ -516,26 +436,9 @@ static void ak49xx_bring_down(struct ak49xx *ak49xx)
 
 static int ak49xx_reset(struct ak49xx *ak49xx)
 {
-    int ret;
+	int ret;
 
-#if 0
-    if (ak49xx->cif1_gpio) {
-        ret = gpio_request(ak49xx->cif1_gpio, "CDC_CIF1");
-        if (ret) {
-            pr_err("%s: Failed to request gpio %d\n", __func__,
-                    ak49xx->cif1_gpio);
-            ak49xx->cif1_gpio = 0;
-            return ret;
-        }
-    }
-	if (ak49xx->cif1_gpio) {
-        printk("%s: enable cif1 to L \n", __func__);
-		gpio_direction_output(ak49xx->cif1_gpio, 0);// 1-slimbus, 0-spi	 //
-		msleep(1);
-	}
-#endif
-	if (ak49xx->reset_gpio && ak49xx->slim_device_bootup
-			&& !ak49xx->use_pinctrl) {
+	if (ak49xx->reset_gpio) {
 		ret = gpio_request(ak49xx->reset_gpio, "CDC_RESET");
 		if (ret) {
 			pr_err("%s: Failed to request gpio %d\n", __func__,
@@ -543,34 +446,11 @@ static int ak49xx_reset(struct ak49xx *ak49xx)
 			ak49xx->reset_gpio = 0;
 			return ret;
 		}
-	}
-	if (ak49xx->reset_gpio) {
-		if (ak49xx->use_pinctrl) {
-			/* Reset the CDC PDM TLMM pins to a default state */
-			ret = pinctrl_select_state(pinctrl_info.pinctrl,
-				pinctrl_info.extncodec_act);
-			if (ret != 0) {
-				pr_err("%s: Failed to enable gpio pins\n",
-						__func__);
-				return -EIO;
-			}
-			gpio_set_value_cansleep(ak49xx->reset_gpio, 0);
-			msleep(20);
-			gpio_set_value_cansleep(ak49xx->reset_gpio, 1);
-			msleep(20);
-			ret = pinctrl_select_state(pinctrl_info.pinctrl,
-					pinctrl_info.extncodec_sus);
-			if (ret != 0) {
-				pr_err("%s: Failed to suspend reset pins\n",
-						__func__);
-				return -EIO;
-			}
-		} else {
-			gpio_direction_output(ak49xx->reset_gpio, 0);
-			msleep(1);
-			gpio_direction_output(ak49xx->reset_gpio, 1);
-			msleep(20);
-		}
+
+		gpio_direction_output(ak49xx->reset_gpio, 0);
+		msleep(1);
+		gpio_direction_output(ak49xx->reset_gpio, 1);
+		msleep(20);
 	}
 	return 0;
 }
@@ -578,25 +458,24 @@ static int ak49xx_reset(struct ak49xx *ak49xx)
 static void ak49xx_free_reset(struct ak49xx *ak49xx)
 {
 	if (ak49xx->reset_gpio) {
-		if (!ak49xx->use_pinctrl) {
-			gpio_free(ak49xx->reset_gpio);
-			ak49xx->reset_gpio = 0;
-		} else
-			pinctrl_put(pinctrl_info.pinctrl);
+		gpio_free(ak49xx->reset_gpio);
+		ak49xx->reset_gpio = 0;
 	}
 }
 
-static int ak49xx_device_init(struct ak49xx *ak49xx)
+static int ak49xx_device_init(struct ak49xx *ak49xx, int irq)
 {
 	int ret;
-	int num_irqs = 0;
-	int ak49xx_dev_size = 0;
 	struct mfd_cell *ak49xx_dev = NULL;
-	struct ak49xx_core_resource *core_res = &ak49xx->core_res;
-	int cnt;
+	int ak49xx_dev_size = 0;
 
 	mutex_init(&ak49xx->io_lock);
 	mutex_init(&ak49xx->xfer_lock);
+
+	mutex_init(&ak49xx->pm_lock);
+	ak49xx->wlock_holders = 0;
+	ak49xx->pm_state = AK49XX_PM_SLEEPABLE;
+	init_waitqueue_head(&ak49xx->pm_wq);
 
 	dev_set_drvdata(ak49xx->dev, ak49xx);
 
@@ -613,7 +492,6 @@ static int ak49xx_device_init(struct ak49xx *ak49xx)
 			ak49xx_dev = ak4960_dev;
 			ak49xx_dev_size = ARRAY_SIZE(ak4960_dev);
 			ak49xx->codec_id = CODEC_AK4960_ID;
-			num_irqs = AK4960_NUM_IRQS;
 
 		} else if (ak49xx->slim->e_addr[0] == 0x00 &&
 			ak49xx->slim->e_addr[1] == 0x02 &&
@@ -625,54 +503,28 @@ static int ak49xx_device_init(struct ak49xx *ak49xx)
 			ak49xx_dev = ak4961_dev;
 			ak49xx_dev_size = ARRAY_SIZE(ak4961_dev);
 			ak49xx->codec_id = CODEC_AK4961_ID;
-			num_irqs = AK4961_NUM_IRQS;
 		}
 
-	} else if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI ||
-			   ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI) {
-		ak49xx_bring_up(ak49xx);
-		for (cnt = 0; cnt < 10; cnt++) {
-			if(ak49xx_spi == NULL)
-				msleep(500);
-			else
-				break;
-		}
-		if (ak49xx_spi == NULL) {
-			pr_err("%s: no spi dev\n", __func__);
+	} else if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI) {
+#ifdef CONFIG_AK4960_CODEC
+		ak49xx_dev = ak4960_dev;
+		ak49xx_dev_size = ARRAY_SIZE(ak4960_dev);
+		ak49xx->codec_id = CODEC_AK4960_ID;
+#endif
+#ifdef CONFIG_AK4961_CODEC
+		ak49xx_dev = ak4961_dev;
+		ak49xx_dev_size = ARRAY_SIZE(ak4961_dev);
+		ak49xx->codec_id = CODEC_AK4961_ID;
+#endif
+	}
+
+	if (ak49xx->irq != -1) {
+		ret = ak49xx_irq_init(ak49xx);
+		if (ret) {
+			pr_err("IRQ initialization failed\n");
 			goto err;
-		}
-		ak49xx->read_dev = ak49xx_spi_read;
-		ak49xx->write_dev = ak49xx_spi_write;
-		//msleep(100);
-		ret = __ak49xx_reg_read(ak49xx, DEVICE_CODE);
-		printk("[ak49xx] %s spi read chip ID =0x%x !\n",__func__,ret);
-		if (ret < 0) {
-			goto err;
-		} else {
-			if (ret == 0x60) {
-				ak49xx_dev = ak4960_dev;
-				ak49xx_dev_size = ARRAY_SIZE(ak4960_dev);
-				ak49xx->codec_id = CODEC_AK4960_ID;
-				num_irqs = AK4960_NUM_IRQS;
-			}
-			if (ret == 0x61) {
-				ak49xx_dev = ak4961_dev;
-				ak49xx_dev_size = ARRAY_SIZE(ak4961_dev);
-				ak49xx->codec_id = CODEC_AK4961_ID;
-				num_irqs = AK4961_NUM_IRQS;
-			}
 		}
 	}
-	core_res->parent = ak49xx;
-	core_res->dev = ak49xx->dev;
-
-	ak49xx_core_res_init(&ak49xx->core_res, num_irqs,
-				AK49XX_NUM_IRQ_REGS,
-				ak49xx_reg_read, ak49xx_reg_write,
-				ak49xx_bulk_read, ak49xx_bulk_write);
-
-	if (ak49xx_core_irq_init(&ak49xx->core_res))
-		goto err;
 
 	if (ak49xx->dev) {
 		ret = mfd_add_devices(ak49xx->dev, -1, ak49xx_dev, ak49xx_dev_size,
@@ -695,10 +547,10 @@ static int ak49xx_device_init(struct ak49xx *ak49xx)
 	return ret;
 
 err_irq:
-	ak49xx_irq_exit(&ak49xx->core_res);
+	ak49xx_irq_exit(ak49xx);
 err:
 	ak49xx_bring_down(ak49xx);
-	ak49xx_core_res_deinit(&ak49xx->core_res);
+	mutex_destroy(&ak49xx->pm_lock);
 	mutex_destroy(&ak49xx->io_lock);
 	mutex_destroy(&ak49xx->xfer_lock);
 	return ret;
@@ -707,17 +559,14 @@ err:
 static void ak49xx_device_exit(struct ak49xx *ak49xx)
 {
 	device_init_wakeup(ak49xx->dev, false);
-	ak49xx_irq_exit(&ak49xx->core_res);
+	ak49xx_irq_exit(ak49xx);
 	ak49xx_bring_down(ak49xx);
 	ak49xx_free_reset(ak49xx);
-	ak49xx_core_res_deinit(&ak49xx->core_res);
+	mutex_destroy(&ak49xx->pm_lock);
 	mutex_destroy(&ak49xx->io_lock);
 	mutex_destroy(&ak49xx->xfer_lock);
-    if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS||
-            ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS_SPI)
-    {
-        slim_remove_device(ak49xx->slim_slave);
-    }
+	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS)
+		slim_remove_device(ak49xx->slim_slave);
 	kfree(ak49xx);
 }
 
@@ -825,20 +674,9 @@ static void ak49xx_disable_supplies(struct ak49xx *ak49xx,
 				     struct ak49xx_pdata *pdata)
 {
 	int i;
-	int rc;
 
-	for (i = 0; i < ak49xx->num_of_supplies; i++) {
-		if (pdata->regulator[i].ondemand)
-			continue;
-		rc = regulator_disable(ak49xx->supplies[i].consumer);
-		if (rc) {
-			pr_err("%s: Failed to disable %s\n", __func__,
-			       ak49xx->supplies[i].supply);
-		} else {
-			pr_debug("%s: Disabled regulator %s\n", __func__,
-				 ak49xx->supplies[i].supply);
-		}
-	}
+	regulator_bulk_disable(ak49xx->num_of_supplies,
+				    ak49xx->supplies);
 	for (i = 0; i < ak49xx->num_of_supplies; i++) {
 		if (regulator_count_voltages(ak49xx->supplies[i].consumer) <=
 		    0)
@@ -853,9 +691,7 @@ static void ak49xx_disable_supplies(struct ak49xx *ak49xx,
 #endif
 
 static int ak49xx_dt_parse_vreg_info(struct device *dev,
-					struct ak49xx_regulator *vreg,
-					const char *vreg_name,
-					bool ondemand)
+	struct ak49xx_regulator *vreg, const char *vreg_name, bool ondemand)
 {
 	int len, ret = 0;
 	const __be32 *prop;
@@ -983,7 +819,7 @@ static struct ak49xx_pdata *ak49xx_populate_dt_pdata(struct device *dev)
 
 	BUG_ON(static_cnt <= 0);
 	if (static_cnt > ARRAY_SIZE(pdata->regulator)) {
-		dev_err(dev, "%s: Num of supplies %u > max supported %zu\n",
+		dev_err(dev, "%s: Num of supplies %u > max supported %u\n",
 			__func__, static_cnt, ARRAY_SIZE(pdata->regulator));
 		goto err;
 	}
@@ -1000,30 +836,16 @@ static struct ak49xx_pdata *ak49xx_populate_dt_pdata(struct device *dev)
 
 		dev_dbg(dev, "%s: Found static cdc supply %s\n", __func__,
 			name);
-#if 0
-        if(get_hw_version() && !strcmp(name,"switch-chip")) {
-            pr_info("get_hw_id is B and not use switch-chip ===\n");
-            continue;
-        } else
-#endif
-        ret = ak49xx_dt_parse_vreg_info(dev, &pdata->regulator[i],name, false);
-
+		ret = ak49xx_dt_parse_vreg_info(dev, &pdata->regulator[i],
+						 name, false);
 		if (ret)
 			goto err;
 	}
 
 	ret = ak49xx_dt_parse_micbias_info(dev, &pdata->micbias);
-    if (ret)
-        goto err;
-#if 0
-	pdata->cif1_gpio= of_get_named_gpio(dev->of_node,
-				"akm,cdc-cif1-gpio", 0);
-	pr_err("%s pdata->cif1_gpio : %d\n",__func__,pdata->cif1_gpio);
-	if (pdata->cif1_gpio < 0) {
-		dev_err(dev, "Looking up %s property in node %s failed %d\n",
-                "akm,cdc-cif1-gpio", dev->of_node->full_name,pdata->cif1_gpio);
-	}
-#endif
+	if (ret)
+		goto err;
+
 	pdata->reset_gpio = of_get_named_gpio(dev->of_node,
 				"akm,cdc-reset-gpio", 0);
 	if (pdata->reset_gpio < 0) {
@@ -1042,7 +864,6 @@ static struct ak49xx_pdata *ak49xx_populate_dt_pdata(struct device *dev)
 			"node %s failed",
 			"akm,cdc-mclk-clk-rate",
 			dev->of_node->full_name);
-		devm_kfree(dev, pdata);
 		ret = -EINVAL;
 		goto err;
 	}
@@ -1065,7 +886,7 @@ static int ak49xx_slim_get_laddr(struct slim_device *sb,
 		if (!ret)
 			break;
 		/* Give SLIMBUS time to report present and be ready. */
-		usleep_range(1000, 1100);
+		usleep_range(1000, 1000);
 		pr_debug_ratelimited("%s: retyring get logical addr\n",
 				     __func__);
 	} while time_before(jiffies, timeout);
@@ -1078,7 +899,6 @@ static int ak49xx_slim_probe(struct slim_device *slim)
 	struct ak49xx *ak49xx;
 	struct ak49xx_pdata *pdata;
 	int ret = 0;
-
 
 	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SPI ||
 		ak49xx_intf == AK49XX_INTERFACE_TYPE_I2C) {
@@ -1125,13 +945,9 @@ static int ak49xx_slim_probe(struct slim_device *slim)
 	ak49xx->slim = slim;
 	slim_set_clientdata(slim, ak49xx);
 	ak49xx->reset_gpio = pdata->reset_gpio;
-#if 0
-	ak49xx->cif1_gpio  = pdata->cif1_gpio;
-#endif
-
 	ak49xx->dev = &slim->dev;
 	ak49xx->mclk_rate = pdata->mclk_rate;
-	ak49xx->slim_device_bootup = true;
+
 #ifdef AK49XX_ENABLE_SUPPLIES
 	ret = ak49xx_init_supplies(ak49xx, pdata);
 	if (ret) {
@@ -1144,7 +960,7 @@ static int ak49xx_slim_probe(struct slim_device *slim)
 				__func__);
 		goto err_codec;
 	}
-	usleep_range(5, 10);
+	usleep_range(5, 5);
 #endif
 
 	ret = ak49xx_reset(ak49xx);
@@ -1165,9 +981,10 @@ static int ak49xx_slim_probe(struct slim_device *slim)
 	ak49xx->write_dev = ak49xx_slim_write_device;
 	ak49xx_pgd_la = ak49xx->slim->laddr;
 	ak49xx->slim_slave = &pdata->slimbus_slave_device;
-	if (!ak49xx->dev->of_node)
-		ak49xx_initialize_irq(&ak49xx->core_res,
-					pdata->irq, pdata->irq_base);
+	if (!ak49xx->dev->of_node) {
+		ak49xx->irq = pdata->irq;
+		ak49xx->irq_base = pdata->irq_base;
+	}
 
 	ret = slim_add_device(slim->ctrl, ak49xx->slim_slave);
 	if (ret) {
@@ -1185,26 +1002,13 @@ static int ak49xx_slim_probe(struct slim_device *slim)
 		goto err_slim_add;
 	}
 	ak49xx_inf_la = ak49xx->slim_slave->laddr;
+	ak49xx_intf = AK49XX_INTERFACE_TYPE_SLIMBUS;
 
-    // fix to use slimbus interface
-    if(get_hw_version()) { // hw_B using spi + slimbus
-        pr_info("ak49xx--- using slimbus_spi interface ....\n");
-        ak49xx_intf = AK49XX_INTERFACE_TYPE_SLIMBUS_SPI;
-        ak49xx_set_intf_type(AK49XX_INTERFACE_TYPE_SLIMBUS_SPI);
-    } else { //hw_A only using slimbus
-       pr_info("ak49xx--- using slimbus interface ....\n");
-        ak49xx_intf = AK49XX_INTERFACE_TYPE_SLIMBUS;
-        ak49xx_set_intf_type(AK49XX_INTERFACE_TYPE_SLIMBUS);
-    }
-
-	ret = ak49xx_device_init(ak49xx);
+	ret = ak49xx_device_init(ak49xx, ak49xx->irq);
 	if (ret) {
 		pr_err("%s: error, initializing device failed\n", __func__);
 		goto err_slim_add;
 	}
-#ifdef CONTROL_IF_SPI
-	ak49xx_slim_spi = ak49xx;
-#endif
 
 	return ret;
 
@@ -1240,34 +1044,27 @@ static int ak49xx_slim_remove(struct slim_device *pdev)
 int ak49xx_spi_read(struct ak49xx *ak49xx, unsigned short reg,
 			int bytes, void *dest, bool interface_reg)
 {
-	int ret;
-	ret=ak49xx_spi_read_device(reg, bytes, dest);
-	return ret;
+	return ak49xx_spi_read_device(reg, bytes, dest);
 }
 
 int ak49xx_spi_write(struct ak49xx *ak49xx, unsigned short reg,
 			 int bytes, void *src, bool interface_reg)
 {
-	int ret;
-	ret = ak49xx_spi_write_device(reg, bytes, src);
-	return ret;
+	return ak49xx_spi_write_device(reg, bytes, src);
 }
 
-static int ak49xx_spi_probe(struct spi_device *spi)
+static int __devinit ak49xx_spi_probe(struct spi_device *spi)
 {
 	struct ak49xx *ak49xx;
 	struct ak49xx_pdata *pdata;
 	int ret = 0;
 
 	pr_debug("%s\n", __func__);
-#ifdef CONTROL_IF_SPI
-	ak49xx_spi = spi;
-	return ret;
-#endif
 	if (ak49xx_intf == AK49XX_INTERFACE_TYPE_SLIMBUS) {
 		pr_info("ak49xx card is already detected in slimbus mode\n");
 		return -ENODEV;
 	}
+
 	ak49xx = kzalloc(sizeof(struct ak49xx), GFP_KERNEL);
 	if (ak49xx == NULL) {
 		pr_err("%s: error, allocation failed\n", __func__);
@@ -1281,22 +1078,10 @@ static int ak49xx_spi_probe(struct spi_device *spi)
 		ret = -EINVAL;
 		goto err_codec;
 	}
-	ret = extcodec_get_pinctrl(&spi->dev);
-	if (ret < 0)
-		ak49xx->use_pinctrl = false;
-	else
-		ak49xx->use_pinctrl = true;
-	dev_dbg(&spi->dev, "ak49xx->use_pinctrl = %d\n", ak49xx->use_pinctrl);
 
 	dev_set_drvdata(&spi->dev, ak49xx);
 	ak49xx->dev = &spi->dev;
 	ak49xx->reset_gpio = pdata->reset_gpio;
-#if 0
-	ak49xx->cif1_gpio  = pdata->cif1_gpio;
-#endif
-	ak49xx->slim_device_bootup = true;
-	if (spi->dev.of_node)
-		ak49xx->mclk_rate = pdata->mclk_rate;
 
 #ifdef AK49XX_ENABLE_SUPPLIES
 	ret = ak49xx_init_supplies(ak49xx, pdata);
@@ -1322,24 +1107,22 @@ static int ak49xx_spi_probe(struct spi_device *spi)
 	ak49xx_spi = spi;
 	ak49xx->read_dev = ak49xx_spi_read;
 	ak49xx->write_dev = ak49xx_spi_write;
-	if (!ak49xx->dev->of_node)
-		ak49xx_initialize_irq(&ak49xx->core_res,
-				pdata->irq, pdata->irq_base);
+	ak49xx->irq = pdata->irq;
+	ak49xx->irq_base = pdata->irq_base;
 
-	ak49xx_intf = AK49XX_INTERFACE_TYPE_SPI;
-	ak49xx_set_intf_type(AK49XX_INTERFACE_TYPE_SPI);
-
-	ret = ak49xx_device_init(ak49xx);
+	ret = ak49xx_device_init(ak49xx, ak49xx->irq);
 	if (ret) {
 		pr_err("%s: error, initializing device failed\n", __func__);
-		goto err_device_init;
+		goto err_reset;
 	} else {
 		pr_info("%s: succeeded in initializing device\n", __func__);
 	}
 
+	ak49xx_intf = AK49XX_INTERFACE_TYPE_SPI;
+
 	return ret;
 
-err_device_init:
+err_reset:
 	ak49xx_free_reset(ak49xx);
 err_supplies:
 #ifdef AK49XX_ENABLE_SUPPLIES
@@ -1351,7 +1134,7 @@ err:
 	return ret;
 }
 
-static int ak49xx_spi_remove(struct spi_device *spi)
+static int __devexit ak49xx_spi_remove(struct spi_device *spi)
 {
 	struct ak49xx *ak49xx;
 	struct ak49xx_pdata *pdata = spi->dev.platform_data;
@@ -1365,90 +1148,87 @@ static int ak49xx_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
-static int ak49xx_device_up(struct ak49xx *ak49xx)
+static int ak49xx_resume(struct ak49xx *ak49xx)
 {
 	int ret = 0;
-	struct ak49xx_core_resource *ak49xx_res = &ak49xx->core_res;
 
-	if (ak49xx->slim_device_bootup) {
-		ak49xx->slim_device_bootup = false;
-		return 0;
-	}
-
-	dev_info(ak49xx->dev, "%s: codec bring up\n", __func__);
-	ak49xx_bring_up(ak49xx);
-	ret = ak49xx_irq_init(ak49xx_res);
-	if (ret) {
-		pr_err("%s: wcd9xx_irq_init failed : %d\n", __func__, ret);
+	pr_debug("%s: enter\n", __func__);
+	mutex_lock(&ak49xx->pm_lock);
+	if (ak49xx->pm_state == AK49XX_PM_ASLEEP) {
+		pr_debug("%s: resuming system, state %d, wlock %d\n", __func__,
+			 ak49xx->pm_state, ak49xx->wlock_holders);
+		ak49xx->pm_state = AK49XX_PM_SLEEPABLE;
 	} else {
-		if (ak49xx->post_reset)
-			ret = ak49xx->post_reset(ak49xx);
+		pr_warn("%s: system is already awake, state %d wlock %d\n",
+			__func__, ak49xx->pm_state, ak49xx->wlock_holders);
 	}
-	return ret;
-}
-
-static int ak49xx_slim_device_reset(struct slim_device *sldev)
-{
-	int ret;
-	struct ak49xx *ak49xx = slim_get_devicedata(sldev);
-	if (!ak49xx) {
-		pr_err("%s: ak49xx is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	dev_info(ak49xx->dev, "%s: device reset\n", __func__);
-	if (ak49xx->slim_device_bootup)
-		return 0;
-	ret = ak49xx_reset(ak49xx);
-	if (ret)
-		dev_err(ak49xx->dev, "%s: Resetting Codec failed\n", __func__);
+	mutex_unlock(&ak49xx->pm_lock);
+	wake_up_all(&ak49xx->pm_wq);
 
 	return ret;
 }
 
-static int ak49xx_slim_device_up(struct slim_device *sldev)
+static int ak49xx_suspend(struct ak49xx *ak49xx, pm_message_t pmesg)
 {
-	struct ak49xx *ak49xx = slim_get_devicedata(sldev);
-	if (!ak49xx) {
-		pr_err("%s: ak49xx is NULL\n", __func__);
-		return -EINVAL;
-	}
-	dev_info(ak49xx->dev, "%s: slim device up\n", __func__);
-	return ak49xx_device_up(ak49xx);
-}
+	int ret = 0;
 
-static int ak49xx_slim_device_down(struct slim_device *sldev)
-{
-	struct ak49xx *ak49xx = slim_get_devicedata(sldev);
-
-	if (!ak49xx) {
-		pr_err("%s: ak49xx is NULL\n", __func__);
-		return -EINVAL;
+	pr_debug("%s: enter\n", __func__);
+	/*
+	 * pm_qos_update_request() can be called after this suspend chain call
+	 * started. thus suspend can be called while lock is being held
+	 */
+	mutex_lock(&ak49xx->pm_lock);
+	if (ak49xx->pm_state == AK49XX_PM_SLEEPABLE) {
+		pr_debug("%s: suspending system, state %d, wlock %d\n",
+			 __func__, ak49xx->pm_state, ak49xx->wlock_holders);
+		ak49xx->pm_state = AK49XX_PM_ASLEEP;
+	} else if (ak49xx->pm_state == AK49XX_PM_AWAKE) {
+		/* unlock to wait for pm_state == AK49XX_PM_SLEEPABLE
+		 * then set to AK49XX_PM_ASLEEP */
+		pr_debug("%s: waiting to suspend system, state %d, wlock %d\n",
+			 __func__, ak49xx->pm_state, ak49xx->wlock_holders);
+		mutex_unlock(&ak49xx->pm_lock);
+		if (!(wait_event_timeout(ak49xx->pm_wq,
+					 ak49xx_pm_cmpxchg(ak49xx,
+						  AK49XX_PM_SLEEPABLE,
+						  AK49XX_PM_ASLEEP) ==
+							AK49XX_PM_SLEEPABLE,
+					 HZ))) {
+			pr_debug("%s: suspend failed state %d, wlock %d\n",
+				 __func__, ak49xx->pm_state,
+				 ak49xx->wlock_holders);
+			ret = -EBUSY;
+		} else {
+			pr_debug("%s: done, state %d, wlock %d\n", __func__,
+				 ak49xx->pm_state, ak49xx->wlock_holders);
+		}
+		mutex_lock(&ak49xx->pm_lock);
+	} else if (ak49xx->pm_state == AK49XX_PM_ASLEEP) {
+		pr_warn("%s: system is already suspended, state %d, wlock %dn",
+			__func__, ak49xx->pm_state, ak49xx->wlock_holders);
 	}
-	ak49xx_irq_exit(&ak49xx->core_res);
-	if (ak49xx->dev_down)
-		ak49xx->dev_down(ak49xx);
-	dev_dbg(ak49xx->dev, "%s: device down\n", __func__);
-	return 0;
+	mutex_unlock(&ak49xx->pm_lock);
+
+	return ret;
 }
 
 static int ak49xx_slim_resume(struct slim_device *sldev)
 {
 	struct ak49xx *ak49xx = slim_get_devicedata(sldev);
-	return ak49xx_core_res_resume(&ak49xx->core_res);
+	return ak49xx_resume(ak49xx);
 }
 
 static int ak49xx_slim_suspend(struct slim_device *sldev, pm_message_t pmesg)
 {
 	struct ak49xx *ak49xx = slim_get_devicedata(sldev);
-	return ak49xx_core_res_suspend(&ak49xx->core_res, pmesg);
+	return ak49xx_suspend(ak49xx, pmesg);
 }
 
 static int ak49xx_spi_resume(struct spi_device *spi)
 {
 	struct ak49xx *ak49xx = dev_get_drvdata(&spi->dev);
 	if (ak49xx)
-		return ak49xx_core_res_resume(&ak49xx->core_res);
+		return ak49xx_resume(ak49xx);
 	else
 		return 0;
 }
@@ -1457,7 +1237,7 @@ static int ak49xx_spi_suspend(struct spi_device *spi, pm_message_t pmesg)
 {
 	struct ak49xx *ak49xx = dev_get_drvdata(&spi->dev);
 	if (ak49xx)
-		return ak49xx_core_res_suspend(&ak49xx->core_res, pmesg);
+		return ak49xx_suspend(ak49xx, pmesg);
 	else
 		return 0;
 }
@@ -1486,7 +1266,7 @@ static struct spi_driver ak4960_spi_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= ak49xx_spi_probe,
-	.remove		= ak49xx_spi_remove,
+	.remove		= __devexit_p(ak49xx_spi_remove),
 	.resume		= ak49xx_spi_resume,
 	.suspend	= ak49xx_spi_suspend,
 };
@@ -1501,37 +1281,28 @@ static struct slim_driver ak4961_slim_driver = {
 		.name = "ak4961-slim",
 		.owner = THIS_MODULE,
 	},
-	.probe			= ak49xx_slim_probe,
-	.remove			= ak49xx_slim_remove,
-	.id_table		= ak4961_slimtest_id,
-	.resume 		= ak49xx_slim_resume,
-	.suspend		= ak49xx_slim_suspend,
-	.device_up 		= ak49xx_slim_device_up,
-	.reset_device 	= ak49xx_slim_device_reset,
-	.device_down 	= ak49xx_slim_device_down,
-};
-
-static const struct of_device_id ak4961_match_table[] = {
-	{	.compatible = "qcom,ak4961-spi", },
-	{}
+	.probe		= ak49xx_slim_probe,
+	.remove		= ak49xx_slim_remove,
+	.id_table	= ak4961_slimtest_id,
+	.resume 	= ak49xx_slim_resume,
+	.suspend	= ak49xx_slim_suspend,
 };
 
 static struct spi_driver ak4961_spi_driver = {
 	.driver = {
 		.name	= "ak4961-spi",
-		//.bus	= &spi_bus_type,
+		.bus	= &spi_bus_type,
 		.owner	= THIS_MODULE,
-		.of_match_table = ak4961_match_table,
 	},
 	.probe		= ak49xx_spi_probe,
-	.remove		= ak49xx_spi_remove,
+	.remove		= __devexit_p(ak49xx_spi_remove),
 	.resume		= ak49xx_spi_resume,
 	.suspend	= ak49xx_spi_suspend,
 };
 
 static int __init ak49xx_init(void)
 {
-	int ret1, ret2, ret3,ret4;
+	int ret1, ret2, ret3, ret4;
 
 	ret1 = slim_driver_register(&ak4960_slim_driver);
 	if (ret1 != 0) {
@@ -1561,7 +1332,7 @@ static int __init ak49xx_init(void)
 		pr_info("%s: succeed in registering ak4961_spi_driver\n", __func__);
 	}
 
-	return (ret1 && ret2 && ret3 &&ret4) ? -1 : 0;
+	return (ret1 && ret2 && ret3 && ret4) ? -1 : 0;
 }
 module_init(ak49xx_init);
 
@@ -1569,12 +1340,9 @@ static void __exit ak49xx_exit(void)
 {
 	spi_unregister_driver(&ak4960_spi_driver);
 	spi_unregister_driver(&ak4961_spi_driver);
-	ak49xx_intf = AK49XX_INTERFACE_TYPE_PROBING;
-	ak49xx_set_intf_type(AK49XX_INTERFACE_TYPE_PROBING);
 }
 module_exit(ak49xx_exit);
 
 MODULE_DESCRIPTION("ak496x core driver");
 MODULE_VERSION("1.0");
 MODULE_LICENSE("GPL v2");
-

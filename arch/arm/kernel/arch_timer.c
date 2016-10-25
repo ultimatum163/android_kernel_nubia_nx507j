@@ -262,8 +262,6 @@ static int __cpuinit arch_timer_setup(struct clock_event_device *clk)
 
 	arch_counter_set_user_access();
 
-	arch_counter_set_user_access();
-
 	return 0;
 }
 

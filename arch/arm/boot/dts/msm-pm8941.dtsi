@@ -563,8 +563,8 @@
 		compatible = "qcom,qpnp-rtc";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		qcom,qpnp-rtc-write = <1>;
-		qcom,qpnp-rtc-alarm-pwrup = <1>;
+		qcom,qpnp-rtc-write = <0>;
+		qcom,qpnp-rtc-alarm-pwrup = <0>;
 
 		qcom,pm8941_rtc_rw@6000 {
 			reg = <0x6000 0x100>;
@@ -839,6 +839,10 @@
 			label = "internal_rsense";
 			reg = <0>;
 			qcom,decimation = <0>;
+			qcom,pre-div-channel-scaling = <1>;
+			qcom,calibration-type = "absolute";
+			qcom,scale-function = <0>;
+			qcom,hw-settle-time = <0>;
 			qcom,fast-avg-setup = <0>;
 		};
 	};

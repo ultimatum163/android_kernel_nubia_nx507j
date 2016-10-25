@@ -169,7 +169,7 @@ static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 	return jiffies_to_usecs(idle_time);
 }
 
-/*static inline cputime64_t get_cpu_idle_time(unsigned int cpu,
+static inline cputime64_t get_cpu_idle_time(unsigned int cpu,
 					    cputime64_t *wall)
 {
 	u64 idle_time = get_cpu_idle_time_us(cpu, wall);
@@ -180,7 +180,7 @@ static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 		idle_time += get_cpu_iowait_time_us(cpu, wall);
 
 	return idle_time;
-}*/
+}
 
 static void cpufreq_interactive_timer_resched(
 	struct cpufreq_interactive_cpuinfo *pcpu)
@@ -801,8 +801,7 @@ static ssize_t show_target_loads(
 		ret += sprintf(buf + ret, "%u%s", target_loads[i],
 			       i & 0x1 ? ":" : " ");
 
-	--ret;	
-	ret += sprintf(buf + ret, "\n");
+	ret += sprintf(buf + --ret, "\n");
 	spin_unlock_irqrestore(&target_loads_lock, flags);
 	return ret;
 }
@@ -845,8 +844,7 @@ static ssize_t show_above_hispeed_delay(
 		ret += sprintf(buf + ret, "%u%s", above_hispeed_delay[i],
 			       i & 0x1 ? ":" : " ");
 
-	--ret;	
-	ret += sprintf(buf + ret, "\n");
+	ret += sprintf(buf + --ret, "\n");
 	spin_unlock_irqrestore(&above_hispeed_delay_lock, flags);
 	return ret;
 }

@@ -194,7 +194,7 @@ int __ptrace_may_access(struct task_struct *task, unsigned int mode)
 	 */
 	int dumpable = 0;
 	/* Don't let security modules deny introspection */
-	if (same_thread_group(task, current))
+	if (task == current)
 		return 0;
 	rcu_read_lock();
 	tcred = __task_cred(task);
@@ -215,8 +215,7 @@ ok:
 	smp_rmb();
 	if (task->mm)
 		dumpable = get_dumpable(task->mm);
-	if (dumpable != SUID_DUMP_USER &&
-	    !ptrace_has_cap(task_user_ns(task), mode))
+	if (!dumpable  && !ptrace_has_cap(task_user_ns(task), mode))
 		return -EPERM;
 
 	return security_ptrace_access_check(task, mode);
