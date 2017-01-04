@@ -57,7 +57,7 @@
 			qcom,use-blink= <1>;
 			linux,default-trigger = "none";
 		};
-				
+
 		qcom,rgb_2 {
 			label = "rgb";
 			linux,name = "led:rgb_blue";
@@ -78,8 +78,8 @@
 			qcom,id = <5>;
 			qcom,use-blink= <1>;
 			linux,default-trigger = "none";
-		};		
-  };				
+		};
+	};
 
 	qcom,leds@d100 {
 		status = "disabled";

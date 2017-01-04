@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -246,7 +246,7 @@
 		status = "disabled";
 	};
 
-	/*add by yfliu, Enable the serial_uart1 for debug*/
+	/* Enable the serial_uart1 for debug */
 	blsp1_uart0: serial@f991d000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf991d000 0x1000>;
@@ -260,7 +260,8 @@
 				<86 512 0 0>,
 				<86 512 500 800>;
 	};
-	/*end*/
+	/* end */
+
 	blsp1_uart1: serial@f991e000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf991e000 0x1000>;
@@ -394,8 +395,8 @@
 		qcom,pad-pull-off = <0x0 0x3 0x3>; /* no-pull, pull-up, pull-up */
 		qcom,pad-drv-on = <0x4 0x4 0x4>; /* 10mA, 10mA, 10mA */
 		qcom,pad-drv-off = <0x0 0x0 0x0>; /* 2mA, 2mA, 2mA */
-
-		qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 200000000>;
+              /*modify sdcard clk for detect by nubia*/
+		qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 171430000>;
 		qcom,sup-voltages = <2950 2950>;
 		qcom,bus-width = <4>;
 		qcom,xpc;
@@ -815,6 +816,7 @@
 			    "lpaif_quat_mode_muxsel";
 
 		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
 			"LDO_H", "MCLK",
 			"AIF4 MAD", "MCLK",
@@ -2283,6 +2285,7 @@
 		qcom,poll-ms = <250>;
 		qcom,limit-temp = <80>;
 		qcom,temp-hysteresis = <10>;
+		qcom,therm-reset-temp = <115>;
 		qcom,freq-step = <1>;
 		qcom,freq-control-mask = <0xf>;
 		qcom,core-limit-temp = <88>;

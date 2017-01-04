@@ -64,7 +64,8 @@
 			qcom,s2-type = <1>;
 			linux,code = <116>;
 		};
-/* Removed by yfliu, for PWK
+
+		/* Removed the node, for PWK
 		qcom,pon_2 {
 			qcom,pon-type = <1>;
 			qcom,support-reset = <1>;
@@ -1247,7 +1248,7 @@
 		compatible = "qcom,qpnp-vibrator";
 		reg = <0xc000 0x100>;
 		label = "vibrator";
-		qcom,vib-vtg-level-mV = <3000>;
+                qcom,vib-vtg-level-mV = <3000>;
 		status = "ok";
 	};
 
@@ -1264,7 +1265,7 @@
 		reg = <0xd000 0x100>;
 		label = "rgb";
 	};
-	
+
 	qcom,leds@d100 {
 		compatible = "qcom,leds-qpnp";
 		reg = <0xd100 0x100>;

@@ -15,7 +15,8 @@
 
 / {
 	aliases {
-		#serial0 = &blsp1_uart1;
+		serial0 = &blsp1_uart0;
+		serial1 = &blsp1_uart1;
 	};
 };
 
@@ -154,18 +155,6 @@
 			vdd_ana-supply = <&pm8941_lvs1>;
 			vcc_i2c-supply = <&pm8941_lvs1>;
 		};
-		broadcom_bcm2079x_nfc@0x77 {
-			compatible = "broadcom,bcm2079x_nfc";
-			reg = <0x77>;
-			//vdd_swp-supply = <&pm8941_l9>;
-			interrupt-parent = <&msmgpio>;
-			//interrupts = <59 0x1>;
-			interrupts = <59 0x1>;
-			broadcom,clk-gpio = <&pm8941_gpios 32 0x00>;
-            broadcom,en-gpio = <&msmgpio 85 0x00>;
-			broadcom,wake-gpio = <&msmgpio 13 0x00>;
-			broadcom,irq-gpio = <&msmgpio 59 0x01>;
-		};
 	};
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
@@ -203,10 +192,10 @@
 	    	ams-sensor_i2c_adapter@39 {
 	                status = "okay";
 	                reg = <0x39>;
-	                compatible = "ams,ams-sensor";   
+	                compatible = "ams,ams-sensor";
 					interrupt-parent = <&msmgpio>;
 	                ams,irq-gpio = <&msmgpio 9 0x00>;
-	                ams,light-percent = <100>;
+	                ams,light-percent = <180>;
 					vdd-supply = <&pm8941_l18>;
 					vio-supply = <&pm8941_lvs1>;
 
@@ -253,7 +242,8 @@
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
-/*add by yfliu, for volume down key*/
+
+		/* for volume down key */
 		vol_down {
 			label = "volume_down";
 			gpios = <&pm8941_gpios 2 0x1>;
@@ -473,9 +463,10 @@
 	mtp_batterydata: qcom,battery-data {
 		qcom,rpull-up-kohm = <100>;
 		qcom,vref-batt-therm = <1800000>;
-
+		/***  ZTEMT_CHARGE modify
 		/include/ "../batterydata-palladium.dtsi"
 		/include/ "../batterydata-mtp-3000mah.dtsi"
+		***/
 	};
 };
 

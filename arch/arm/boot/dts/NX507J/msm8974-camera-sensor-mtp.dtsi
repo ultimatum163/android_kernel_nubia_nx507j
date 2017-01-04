@@ -43,7 +43,7 @@
 		compatible = "qcom,actuator";
 		qcom,cci-master = <0>;
 	};
-	/*add 214 af end*/
+/*add 214 af end*/
 	qcom,camera@6e {
 		compatible = "qcom,s5k3l1yx";
 		reg = <0x6e>;
