@@ -635,6 +635,20 @@ static void attach_mnt(struct mount *mnt, struct path *path)
 	list_add_tail(&mnt->mnt_child, &real_mount(path->mnt)->mnt_mounts);
 }
 
+	static inline void __mnt_make_longterm(struct mount *mnt)
+{
+#ifdef CONFIG_SMP
+	atomic_inc(&mnt->mnt_longterm);
+#endif
+}
+/* needs vfsmount lock for write */
+static inline void __mnt_make_shortterm(struct mount *mnt)
+{
+#ifdef CONFIG_SMP
+	atomic_dec(&mnt->mnt_longterm);
+#endif
+}
+
 /*
  * vfsmount lock must be held for write
  */
@@ -1080,8 +1094,9 @@ void umount_tree(struct mount *mnt, int propagate, struct list_head *kill)
 		list_del_init(&p->mnt_expire);
 		list_del_init(&p->mnt_list);
 		__touch_mnt_namespace(p->mnt_ns);
+		if (p->mnt_ns)
+			__mnt_make_shortterm(p);
 		p->mnt_ns = NULL;
-		list_del_init(&p->mnt_child);
 		if (mnt_has_parent(p)) {
 			p->mnt_parent->mnt_ghosts++;
 			dentry_reset_mounted(p->mnt_mountpoint);
@@ -1339,8 +1354,11 @@ struct vfsmount *collect_mounts(struct path *path)
 {
 	struct mount *tree;
 	down_write(&namespace_sem);
-	tree = copy_tree(real_mount(path->mnt), path->dentry,
-			 CL_COPY_ALL | CL_PRIVATE);
+	if (!check_mnt(real_mount(path->mnt)))
+		tree = ERR_PTR(-EINVAL);
+	else
+		tree = copy_tree(real_mount(path->mnt), path->dentry,
+				 CL_COPY_ALL | CL_PRIVATE);
 	up_write(&namespace_sem);
 	if (IS_ERR(tree))
 		return NULL;
@@ -1923,10 +1941,6 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 	err = do_add_mount(real_mount(mnt), path, mnt_flags);
 	if (err)
 		mntput(mnt);
-
-//	if (!err && !strcmp(fstype, "ext4") && !strcmp(path->dentry->d_name.name, "data"))
-//		mnt->mnt_sb->fsync_flags |= FLAG_ASYNC_FSYNC;
-
 	return err;
 }
 
@@ -2425,9 +2439,9 @@ SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		char __user *, type, unsigned long, flags, void __user *, data)
 {
 	int ret;
-	char *kernel_type = NULL;
-	char *kernel_dir = NULL;
-	char *kernel_dev = NULL;
+	char *kernel_type;
+	char *kernel_dir;
+	char *kernel_dev;
 	unsigned long data_page;
 
 	ret = copy_mount_string(type, &kernel_type);

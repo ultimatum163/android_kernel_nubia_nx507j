@@ -931,6 +931,7 @@ static void __init fill_pmd_gaps(void)
 	/* we're still single threaded hence no lock needed here */
 	for (vm = vmlist; vm; vm = vm->next) {
 		if (!(vm->flags & (VM_ARM_STATIC_MAPPING | VM_ARM_EMPTY_MAPPING)))
+			
 			continue;
 		addr = (unsigned long)vm->addr;
 		if (addr < next)
@@ -1571,6 +1572,8 @@ static void __init remap_pages(void)
 		bool fixup = false, end_fixup = false;
 		unsigned long saved_start = addr;
 
+		if (phys_start > arm_lowmem_limit)
+			break;
 		if (phys_end > arm_lowmem_limit)
 			end = (unsigned long)__va(arm_lowmem_limit);
 		if (phys_start >= phys_end)

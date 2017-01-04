@@ -357,9 +357,7 @@ static ssize_t mtdchar_write(struct file *file, const char __user *buf, size_t c
 } /* mtdchar_write */
 
 /*======================================================================
-
     IOCTL calls for getting device parameters.
-
 ======================================================================*/
 static void mtdchar_erase_callback (struct erase_info *instr)
 {
@@ -729,7 +727,6 @@ static int mtdchar_ioctl(struct file *file, u_int cmd, u_long arg)
 			/*
 			  FIXME: Allow INTERRUPTIBLE. Which means
 			  not having the wait_queue head on the stack.
-
 			  If the wq_head is on the stack, and we
 			  leave because we got interrupted, then the
 			  wq_head is no longer there when the
@@ -1164,11 +1161,11 @@ static int mtdchar_mmap(struct file *file, struct vm_area_struct *vma)
 	struct mtd_info *mtd = mfi->mtd;
 	struct map_info *map = mtd->priv;
 
-	/* This is broken because it assumes the MTD device is map-based
-	  and that mtd->priv is a valid struct map_info.  It should be
-	  replaced with something that uses the mtd_get_unmapped_area()
-	  operation properly. */
-        if (0 /*mtd->type == MTD_RAM || mtd->type == MTD_ROM*/) {
+        /* This is broken because it assumes the MTD device is map-based
+	   and that mtd->priv is a valid struct map_info.  It should be
+	   replaced with something that uses the mtd_get_unmapped_area()
+	   operation properly. */
+	if (0 /*mtd->type == MTD_RAM || mtd->type == MTD_ROM*/) {
 #ifdef pgprot_noncached
 		if (file->f_flags & O_DSYNC || map->phys >= __pa(high_memory))
 			vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);

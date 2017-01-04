@@ -9,6 +9,7 @@
  *  Copyright (C) 2004-2006 Ingo Molnar
  *  Copyright (C) 2004 William Lee Irwin III
  */
+
 #include <linux/ring_buffer.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>

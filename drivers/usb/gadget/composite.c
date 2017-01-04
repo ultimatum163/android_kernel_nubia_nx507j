@@ -662,6 +662,11 @@ static int set_config(struct usb_composite_dev *cdev,
 		 */
 		switch (gadget->speed) {
 		case USB_SPEED_SUPER:
+			if (!f->ss_descriptors) {
+				pr_err("%s(): No SS desc for function:%s\n",
+							__func__, f->name);
+				return -EINVAL;
+			}
 			descriptors = f->ss_descriptors;
 			break;
 		case USB_SPEED_HIGH:
@@ -1149,6 +1154,10 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				cdev->desc.bcdUSB = cpu_to_le16(0x0210);
 				DBG(cdev, "Config HS device with LPM(L1)\n");
 			}
+#ifdef CONFIG_ZTEMT_USB
+			if(composite)
+				composite->dev->bcdUSB = cdev->desc.bcdUSB;
+#endif
 
 			value = min(w_length, (u16) sizeof cdev->desc);
 			memcpy(req->buf, &cdev->desc, value);

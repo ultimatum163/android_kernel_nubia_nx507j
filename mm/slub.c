@@ -3957,9 +3957,9 @@ struct kmem_cache *kmem_cache_create(const char *name, size_t size,
 			}
 			return s;
 		}
+		kfree(n);
 		kfree(s);
 	}
-	kfree(n);
 err:
 	up_write(&slub_lock);
 
@@ -4506,13 +4506,7 @@ static ssize_t show_slab_objects(struct kmem_cache *s,
 			page = c->partial;
 
 			if (page) {
-				node = page_to_nid(page);
-				if (flags & SO_TOTAL)
-					WARN_ON_ONCE(1);
-				else if (flags & SO_OBJECTS)
-					WARN_ON_ONCE(1);
-				else
-					x = page->pages;
+				x = page->pobjects;
 				total += x;
 				nodes[node] += x;
 			}

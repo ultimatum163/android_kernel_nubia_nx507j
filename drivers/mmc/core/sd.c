@@ -1063,7 +1063,6 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 		err = mmc_select_card(card);
 		if (err)
 			return err;
-		host->card = card;
 	}
 
 	err = mmc_sd_setup_card(host, card, oldcard != NULL);
@@ -1135,11 +1134,11 @@ static void mmc_sd_remove(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
-	mmc_exit_clk_scaling(host);
 	mmc_remove_card(host->card);
 
 	mmc_claim_host(host);
 	host->card = NULL;
+	mmc_exit_clk_scaling(host);
 	mmc_release_host(host);
 }
 

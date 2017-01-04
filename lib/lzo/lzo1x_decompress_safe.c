@@ -19,13 +19,11 @@
 #include <linux/lzo.h>
 #include "lzodefs.h"
 
-
 #define HAVE_IP(x)      ((size_t)(ip_end - ip) >= (size_t)(x))
 #define HAVE_OP(x)      ((size_t)(op_end - op) >= (size_t)(x))
 #define NEED_IP(x)      if (!HAVE_IP(x)) goto input_overrun
 #define NEED_OP(x)      if (!HAVE_OP(x)) goto output_overrun
 #define TEST_LB(m_pos)  if ((m_pos) < out) goto lookbehind_overrun
-
 
 /* This MAX_255_COUNT is the maximum number of times we can add 255 to a base
  * count without overflowing an integer. The multiply will overflow when
@@ -91,18 +89,15 @@ copy_literal_run:
 						COPY8(op, ip);
 						op += 8;
 						ip += 8;
-#  if !defined(__arm__)
 						COPY8(op, ip);
 						op += 8;
 						ip += 8;
-#  endif
 					} while (ip < ie);
 					ip = ie;
 					op = oe;
 				} else
 #endif
 				{
-
 					NEED_OP(t);
 					NEED_IP(t + 3);
 					do {
@@ -117,7 +112,6 @@ copy_literal_run:
 				m_pos -= t >> 2;
 				m_pos -= *ip++ << 2;
 				TEST_LB(m_pos);
-
 				NEED_OP(2);
 				op[0] = m_pos[0];
 				op[1] = m_pos[1];
@@ -144,17 +138,14 @@ copy_literal_run:
 
 				while (unlikely(*ip == 0)) {
 					ip++;
-
 					NEED_IP(1);
 				}
-
 				offset = ip - ip_last;
 				if (unlikely(offset > MAX_255_COUNT))
 					return LZO_E_ERROR;
 
 				offset = (offset << 8) - offset;
 				t += offset + 31 + *ip++;
-
 				NEED_IP(2);
 			}
 			m_pos = op - 1;
@@ -172,17 +163,14 @@ copy_literal_run:
 
 				while (unlikely(*ip == 0)) {
 					ip++;
-
 					NEED_IP(1);
 				}
-
 				offset = ip - ip_last;
 				if (unlikely(offset > MAX_255_COUNT))
 					return LZO_E_ERROR;
 
 				offset = (offset << 8) - offset;
 				t += offset + 7 + *ip++;
-
 				NEED_IP(2);
 			}
 			next = get_unaligned_le16(ip);
@@ -197,20 +185,16 @@ copy_literal_run:
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
 		if (op - m_pos >= 8) {
 			unsigned char *oe = op + t;
-
 			if (likely(HAVE_OP(t + 15))) {
 				do {
 					COPY8(op, m_pos);
 					op += 8;
 					m_pos += 8;
-#  if !defined(__arm__)
 					COPY8(op, m_pos);
 					op += 8;
 					m_pos += 8;
-#  endif
 				} while (op < oe);
 				op = oe;
-
 				if (HAVE_IP(6)) {
 					state = next;
 					COPY4(op, ip);
@@ -219,7 +203,6 @@ copy_literal_run:
 					continue;
 				}
 			} else {
-
 				NEED_OP(t);
 				do {
 					*op++ = *m_pos++;
@@ -242,7 +225,6 @@ match_next:
 		state = next;
 		t = next;
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
-
 		if (likely(HAVE_IP(6) && HAVE_OP(4))) {
 			COPY4(op, ip);
 			op += t;

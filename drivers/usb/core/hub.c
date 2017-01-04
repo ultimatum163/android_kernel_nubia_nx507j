@@ -815,7 +815,6 @@ enum hub_activation_type {
 
 static void hub_init_func2(struct work_struct *ws);
 static void hub_init_func3(struct work_struct *ws);
-static void hub_release(struct kref *kref);
 
 static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 {
@@ -2708,6 +2707,10 @@ int usb_port_suspend(struct usb_device *udev, pm_message_t msg)
 				(void) usb_disable_function_remotewakeup(udev);
 
 		}
+
+		/* Try to enable USB2 hardware LPM again */
+		if (udev->usb2_hw_lpm_capable == 1)
+			usb_set_usb2_hardware_lpm(udev, 1);
 
 		/* System sleep transitions should never fail */
 		if (!PMSG_IS_AUTO(msg))

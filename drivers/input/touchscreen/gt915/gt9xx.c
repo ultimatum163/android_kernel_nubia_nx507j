@@ -684,6 +684,39 @@ static ssize_t ztemt_wakeup_gesture_store(struct device *dev,
 static DEVICE_ATTR(wakeup_gesture, 0664, ztemt_wakeup_gesture_show, ztemt_wakeup_gesture_store);
 /*luochangyang END*/
 
+static ssize_t ztemt_keypad_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+	struct goodix_ts_data *ts = i2c_get_clientdata(client);
+	ssize_t ret;
+
+	ret = sprintf(buf, "0x%02X\n", ts->keypad_enable);
+
+	return ret;
+}
+
+static ssize_t ztemt_keypad_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct i2c_client *client = container_of(dev, struct i2c_client, dev);
+	struct goodix_ts_data *ts = i2c_get_clientdata(client);
+	unsigned long value;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &value);
+	if (ret < 0)
+		return ret;
+
+	if (value > 0)
+		value = 1;
+
+	ts->keypad_enable = (u8)value;
+
+	return size;
+}
+
+static DEVICE_ATTR(keypad_enable, 0664, ztemt_keypad_enable_show, ztemt_keypad_enable_store);
 
 /*******************************************************
 Function:
@@ -743,7 +776,7 @@ static void goodix_ts_work_func(struct work_struct *work)
         ret = gtp_i2c_read(i2c_connect_client, doze_buf, 3);
         GTP_DEBUG("0x814B = 0x%02X", doze_buf[2]);
         if (ret > 0)
-        {
+        {     
 #if 0
             if ((doze_buf[2] == 'a') || (doze_buf[2] == 'b') || (doze_buf[2] == 'c') ||
                 (doze_buf[2] == 'd') || (doze_buf[2] == 'e') || (doze_buf[2] == 'g') || 
@@ -799,18 +832,19 @@ static void goodix_ts_work_func(struct work_struct *work)
 				} else {
 					GTP_INFO("Double click AA area to light up the screen!");
 					doze_status = DOZE_WAKEUP;
-#if 1			//add by luochangyang 2014/04/30
-					input_report_key(ts->input_dev, KEY_WAKEUP, 1);
-					input_sync(ts->input_dev);
-					input_report_key(ts->input_dev, KEY_WAKEUP, 0);
-					input_sync(ts->input_dev);
+#if 0			//add by luochangyang 2014/04/30
+				input_report_key(ts->input_dev, KEY_F10, 1);
+				input_sync(ts->input_dev);
+
+				input_report_key(ts->input_dev, KEY_F10, 0);
+				input_sync(ts->input_dev);
 #else
-                			input_report_key(ts->input_dev, KEY_WAKEUP, 1);
-                			input_sync(ts->input_dev);
-                			input_report_key(ts->input_dev, KEY_WAKEUP, 0);
-                			input_sync(ts->input_dev);
+                input_report_key(ts->input_dev, KEY_WAKEUP, 1);
+                input_sync(ts->input_dev);
+                input_report_key(ts->input_dev, KEY_WAKEUP, 0);
+                input_sync(ts->input_dev);
 #endif
-            			}
+            }
             }
 
                 // clear 0x814B
@@ -1037,7 +1071,8 @@ static void goodix_ts_work_func(struct work_struct *work)
                     }
                 }
             #endif
-                input_report_key(ts->input_dev, touch_key_array[i], key_value & (0x01<<i));   
+                if (ts->keypad_enable)
+                    input_report_key(ts->input_dev, touch_key_array[i], key_value & (0x01<<i));   
             }
             touch_num = 0;  // shield fingers
         }
@@ -2085,7 +2120,7 @@ static s8 gtp_request_input_dev(struct goodix_ts_data *ts)
     }
 #endif
 
-    //input_set_capability(ts->input_dev, EV_KEY, KEY_F10); //Added by luochangyang, 2014/02/19
+    input_set_capability(ts->input_dev, EV_KEY, KEY_F10); //Added by luochangyang, 2014/02/19
 
 #if GTP_GESTURE_WAKEUP
     input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);
@@ -2865,6 +2900,12 @@ static int goodix_ts_probe(struct i2c_client *client, const struct i2c_device_id
 	ts->wakeup_gesture = 0;
 #endif
 	/*luochangyang END*/
+
+	ret = device_create_file(&(client->dev), &dev_attr_keypad_enable);
+	if (ret) {
+		dev_err(&(client->dev), "%s: Error, could not create keypad_enable", __func__);
+	}
+	ts->keypad_enable = 1;
 
 #if GTP_CREATE_WR_NODE
     init_wr_node(client);

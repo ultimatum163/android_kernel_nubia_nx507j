@@ -32,7 +32,7 @@
 	qcom,mdss_dsi@fd922e00 {
 		status = "disabled";
 	};
-
+	
 	qcom,mdss_mdp@fd900000 {
 		qcom,mdss-pref-prim-intf = "dsi";
 		batfet-supply = <&pm8941_chg_batif>;
@@ -282,8 +282,7 @@
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
-
-		/* for volume down key */
+/*add by yfliu, for volume down key*/
 		vol_down {
 			label = "volume_down";
 			gpios = <&pm8941_gpios 2 0x1>;
@@ -525,7 +524,7 @@
 
 &pm8941_chg {
 	status = "ok";
-	//ZTEMT_CHARGE enable charging,we should delete it
+	//ZTEMT_CHARGE enabel charging,we should delete it
 	/*qcom,charging-disabled;*/
 	qcom,battery-data = <&mtp_batterydata>;
 

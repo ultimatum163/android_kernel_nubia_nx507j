@@ -230,8 +230,8 @@ struct mem_cgroup {
 	struct res_counter res;
 
 	/* vmpressure notifications */
-	struct vmpressure vmpressure;
-
+ 	struct vmpressure vmpressure;
+ 
 	union {
 		/*
 		 * the counter to account for mem+swap usage.
@@ -4550,17 +4550,16 @@ static void mem_cgroup_usage_unregister_event(struct cgroup *cgrp,
 swap_buffers:
 	/* Swap primary and spare array */
 	thresholds->spare = thresholds->primary;
-
-	rcu_assign_pointer(thresholds->primary, new);
-
-	/* To be sure that nobody uses thresholds */
-	synchronize_rcu();
-
 	/* If all events are unregistered, free the spare array */
 	if (!new) {
 		kfree(thresholds->spare);
 		thresholds->spare = NULL;
 	}
+
+	rcu_assign_pointer(thresholds->primary, new);
+
+	/* To be sure that nobody uses thresholds */
+	synchronize_rcu();
 unlock:
 	mutex_unlock(&memcg->thresholds_lock);
 }
@@ -4760,9 +4759,9 @@ static struct cftype mem_cgroup_files[] = {
 	},
 	{
 		.name = "pressure_level",
-		.register_event = vmpressure_register_event,
-		.unregister_event = vmpressure_unregister_event,
-	},
+ 		.register_event = vmpressure_register_event,
+ 		.unregister_event = vmpressure_unregister_event,
+ 	},
 #ifdef CONFIG_NUMA
 	{
 		.name = "numa_stat",
@@ -4870,6 +4869,7 @@ static struct mem_cgroup *mem_cgroup_alloc(void)
 	if (!memcg->stat)
 		goto out_free;
 	spin_lock_init(&memcg->pcp_counter_lock);
+	vmpressure_init(&memcg->vmpressure);
 	return memcg;
 
 out_free:
@@ -5065,7 +5065,6 @@ mem_cgroup_create(struct cgroup *cont)
 	memcg->move_charge_at_immigrate = 0;
 	mutex_init(&memcg->thresholds_lock);
 	spin_lock_init(&memcg->move_lock);
-	vmpressure_init(&memcg->vmpressure);
 	return &memcg->css;
 free_out:
 	__mem_cgroup_free(memcg);

@@ -114,6 +114,8 @@ struct goodix_ts_data {
 	u8	wakeup_gesture_flag;
 /*ZTEMT END*/
 
+    u8 keypad_enable;
+
     s32 irq_is_disable;
     s32 use_irq;
     u16 abs_x_max;

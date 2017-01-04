@@ -372,6 +372,30 @@ static struct msm_gpiomux_config msm_touch_configs[] __initdata = {
 	},
 
 };
+static struct msm_gpiomux_config msm_nxp_configs[] __initdata = {
+	{
+		.gpio      = 85,		/* NXP VEN */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &atmel_resout_act_cfg,
+			[GPIOMUX_SUSPENDED] = &atmel_resout_sus_cfg,
+		},
+	},
+	{
+		.gpio      = 13,		/* NXP GPIO4 */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &atmel_resout_act_cfg,
+			[GPIOMUX_SUSPENDED] = &atmel_resout_sus_cfg,
+		},
+	},
+	{
+		.gpio      = 80,		/* NXP IRQ */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &atmel_int_act_cfg,
+			[GPIOMUX_SUSPENDED] = &atmel_int_sus_cfg,
+		},
+	},
+
+};
 
 static struct gpiomux_setting hsic_sus_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
@@ -469,11 +493,47 @@ static struct gpiomux_setting hdmi_active_2_cfg = {
 	.drv = GPIOMUX_DRV_16MA,
 	.pull = GPIOMUX_PULL_DOWN,
 };
+#if 0
+/* ZTEMT Added by LiuYongfeng, 2013/8/9 */
+static struct gpiomux_setting slimport_suspend_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,	
+};
 
+static struct gpiomux_setting slimport_active_1_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_UP,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
+/*disable slimport ic by pull up the gpio anx7808 pwr, in order to enable the usb port while system bring up*/
+static struct msm_gpiomux_config msm_slimport_default_configs[] __initdata = {
+	{
+		/*slimport anx7808 en*/
+		.gpio = 14,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &slimport_suspend_config,
+			[GPIOMUX_ACTIVE]    = &slimport_active_1_cfg,
+		},
+
+	},
+	{
+		/* slimport-anx7808 pwr */
+		.gpio = 26,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &slimport_suspend_config,
+			[GPIOMUX_ACTIVE]    = &slimport_active_1_cfg,
+		},
+	},
+};
+/* ZTEMT END */
+#endif
 static struct msm_gpiomux_config msm_mhl_configs[] __initdata = {
 	{
 		/* mhl-sii8334 pwr */
-		.gpio = 14,
+		.gpio = 12,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &mhl_suspend_config,
 			[GPIOMUX_ACTIVE]    = &mhl_active_1_cfg,
@@ -481,7 +541,7 @@ static struct msm_gpiomux_config msm_mhl_configs[] __initdata = {
 	},
 	{
 		/* mhl-sii8334 intr */
-		.gpio = 26,
+		.gpio = 82,
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &mhl_suspend_config,
 			[GPIOMUX_ACTIVE]    = &mhl_active_1_cfg,
@@ -612,12 +672,22 @@ static struct msm_gpiomux_config msm_epm_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_epm_marker_config,
 		},
 	},
+//Change by wuzehui
+	{
+		.gpio      = 96,		/* EPM MARKER1 */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+#if 0
 	{
 		.gpio      = 96,		/* EPM MARKER1 */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_epm_marker_config,
 		},
 	},
+
+#endif
 };
 
 static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
@@ -637,6 +707,7 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 	},
 #endif
 /* ZTEMT END */
+
 #if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
 	{
 		.gpio      = 0,		/* BLSP1 QUP SPI_DATA_MOSI */
@@ -721,12 +792,18 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 		.gpio      = 29,		/* BLSP1 QUP6 I2C_DAT */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_i2c_config,
+		#ifdef CONFIG_ZTEMT_CHARGE_BQ24192
+			[GPIOMUX_ACTIVE] = &gpio_i2c_act_config,
+		#endif
 		},
 	},
 	{                           /* NFC */
 		.gpio      = 30,		/* BLSP1 QUP6 I2C_CLK */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_i2c_config,
+		#ifdef CONFIG_ZTEMT_CHARGE_BQ24192
+			[GPIOMUX_ACTIVE] = &gpio_i2c_act_config,
+		#endif
 		},
 	},
 	{
@@ -736,6 +813,8 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+	#ifdef CONFIG_SWITCH_GPIO
+	#else
 	{
 		.gpio      = 54,		/* BLSP2 QUP4 SPI_DATA_MISO */
 		.settings = {
@@ -743,6 +822,7 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+	#endif
 	{
 		.gpio      = 56,		/* BLSP2 QUP4 SPI_CLK */
 		.settings = {
@@ -804,6 +884,19 @@ static struct gpiomux_setting cam_settings[] = {
 		.drv = GPIOMUX_DRV_2MA,
 		.pull = GPIOMUX_PULL_DOWN,
 	},
+#if 0//def CONFIG_ZTE_CAMERA_Z7
+	{
+		.func = GPIOMUX_FUNC_2, /*active 0*/ /* 5 */
+		.drv = GPIOMUX_DRV_2MA,
+		.pull = GPIOMUX_PULL_NONE,
+	},
+
+	{
+		.func = GPIOMUX_FUNC_2, /*suspend 0*/ /* 6 */
+		.drv = GPIOMUX_DRV_2MA,
+		.pull = GPIOMUX_PULL_DOWN,
+	},
+#endif
 };
 
 static struct gpiomux_setting sd_card_det_active_config = {
@@ -819,6 +912,37 @@ static struct gpiomux_setting sd_card_det_sleep_config = {
 	.pull = GPIOMUX_PULL_UP,
 	.dir = GPIOMUX_IN,
 };
+//Add by wuzehui
+static struct gpiomux_setting speaker_amp_active= {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting speaker_amp_sleep = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,
+};
+
+static struct msm_gpiomux_config speaker_ext_gpio_configs[] __initdata = {
+    {
+		.gpio = 16, /* Lineout_1 spk_ext_gpio */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &speaker_amp_active,
+			[GPIOMUX_SUSPENDED] = &speaker_amp_sleep,
+		},
+	},
+
+	{
+		.gpio = 23, /* Lineout_1 spk_ext_gpio */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &speaker_amp_active,
+			[GPIOMUX_SUSPENDED] = &speaker_amp_sleep,
+		},
+	},
+};
+// end by wuzehui
 
 static struct msm_gpiomux_config sd_card_det __initdata = {
 	.gpio = 62,
@@ -836,6 +960,8 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &cam_settings[1],
 		},
 	},
+    // Change by wuzehui
+#if 0
 	{
 		.gpio = 16, /* CAM_MCLK1 */
 		.settings = {
@@ -843,6 +969,7 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &cam_settings[1],
 		},
 	},
+#endif
 	{
 		.gpio = 17, /* CAM_MCLK2 */
 		.settings = {
@@ -885,6 +1012,8 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
 		},
 	},
+    // Chang by wuzheui
+#if 0
 	{
 		.gpio = 23, /* FLASH_LED_EN */
 		.settings = {
@@ -892,6 +1021,7 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+#endif
 	{
 		.gpio = 24, /* FLASH_LED_NOW */
 		.settings = {
@@ -906,6 +1036,7 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+	#if 0
 	{
 		.gpio = 26, /* CAM_IRQ */
 		.settings = {
@@ -920,6 +1051,7 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+	#endif
 	{
 		.gpio = 28, /* WEBCAM1_STANDBY */
 		.settings = {
@@ -927,6 +1059,7 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+
 	{
 		.gpio = 89, /* CAM1_STANDBY_N */
 		.settings = {
@@ -1059,6 +1192,7 @@ static struct msm_gpiomux_config msm_sensor_configs_dragonboard[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+	#if 0
 	{
 		.gpio = 26, /* CAM_IRQ */
 		.settings = {
@@ -1073,6 +1207,7 @@ static struct msm_gpiomux_config msm_sensor_configs_dragonboard[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
+	#endif
 	{
 		.gpio = 28, /* WEBCAM1_STANDBY */
 		.settings = {
@@ -1505,6 +1640,29 @@ static void msm_gpiomux_sdc4_install(void)
 static void msm_gpiomux_sdc4_install(void) {}
 #endif /* CONFIG_MMC_MSM_SDC4_SUPPORT */
 
+//ZTEMT add by wangshuai  (1/2)  modify for i2c1 gpio config
+#define ZTEMT_I2C1_CONFIG  
+#ifdef ZTEMT_I2C1_CONFIG
+static struct msm_gpiomux_config apq8974_i2c1_config[] __initdata = {
+	{
+		/* BLSP1 QUP I2C_DATA */
+		.gpio      = 2,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_i2c_config,
+			[GPIOMUX_ACTIVE] = &gpio_i2c_config,//added, i2c need active config
+		},
+	},
+	{
+		/* BLSP1 QUP I2C_CLK */
+		.gpio      = 3,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_i2c_config,
+			[GPIOMUX_ACTIVE] = &gpio_i2c_config,//added, i2c need active config
+		},
+	},
+};
+
+#else
 static struct msm_gpiomux_config apq8074_dragonboard_ts_config[] __initdata = {
 	{
 		/* BLSP1 QUP I2C_DATA */
@@ -1521,6 +1679,7 @@ static struct msm_gpiomux_config apq8074_dragonboard_ts_config[] __initdata = {
 		},
 	},
 };
+#endif
 
 void __init msm_8974_init_gpiomux(void)
 {
@@ -1564,6 +1723,11 @@ void __init msm_8974_init_gpiomux(void)
 		msm_gpiomux_install(msm_sensor_configs, \
 				ARRAY_SIZE(msm_sensor_configs));
 
+//Add by wuzehui
+    msm_gpiomux_install(speaker_ext_gpio_configs,ARRAY_SIZE(speaker_ext_gpio_configs));
+	//add by chengdongsheng for nfc
+	msm_gpiomux_install(msm_nxp_configs, ARRAY_SIZE(msm_nxp_configs));
+	//end
 	msm_gpiomux_install(&sd_card_det, 1);
 
 	if (machine_is_apq8074() && (of_board_is_liquid() || \
@@ -1579,8 +1743,12 @@ void __init msm_8974_init_gpiomux(void)
 	msm_gpiomux_install(msm_hsic_hub_configs,
 				ARRAY_SIZE(msm_hsic_hub_configs));
 
+/* ZTEMT Added by LiuYongfeng, 2013/8/9 disable simport chip in order to enable usb connect*/
+//	msm_gpiomux_install(msm_slimport_default_configs, 
+//				ARRAY_SIZE(msm_slimport_default_configs));
+/* ZTEMT END */
 	msm_gpiomux_install(msm_hdmi_configs, ARRAY_SIZE(msm_hdmi_configs));
-//	if (of_board_is_fluid())
+	if (of_board_is_fluid())
 		msm_gpiomux_install(msm_mhl_configs,
 				    ARRAY_SIZE(msm_mhl_configs));
 
@@ -1611,9 +1779,14 @@ void __init msm_8974_init_gpiomux(void)
 		msm_gpiomux_install(mdm_configs,
 			ARRAY_SIZE(mdm_configs));
 
+    //ZTEMT wangshuai  (2/2)
+    #ifdef  ZTEMT_I2C1_CONFIG
+	msm_gpiomux_install(apq8974_i2c1_config, ARRAY_SIZE(apq8974_i2c1_config)); 
+	#else
 	if (of_board_is_dragonboard() && machine_is_apq8074())
 		msm_gpiomux_install(apq8074_dragonboard_ts_config,
 			ARRAY_SIZE(apq8074_dragonboard_ts_config));
+	#endif
 }
 
 static void wcnss_switch_to_gpio(void)

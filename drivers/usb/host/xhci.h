@@ -1,3 +1,4 @@
+
 /*
  * xHCI host controller driver
  *
@@ -1256,6 +1257,8 @@ struct xhci_td {
 	struct xhci_segment	*start_seg;
 	union xhci_trb		*first_trb;
 	union xhci_trb		*last_trb;
+	/* actual_length of the URB has already been set */
+	bool			urb_length_set;
 };
 
 /* xHCI command default timeout value */
@@ -1385,6 +1388,8 @@ struct xhci_bus_state {
 	u32			suspended_ports;
 	u32			port_remote_wakeup;
 	unsigned long		resume_done[USB_MAXCHILDREN];
+	/* which ports have started to resume */
+	unsigned long		resuming_ports;
 };
 
 static inline unsigned int hcd_index(struct usb_hcd *hcd)
@@ -1507,12 +1512,14 @@ struct xhci_hcd {
 #define XHCI_RESET_ON_RESUME	(1 << 7)
 #define	XHCI_SW_BW_CHECKING	(1 << 8)
 #define XHCI_AMD_0x96_HOST	(1 << 9)
+#define XHCI_TRUST_TX_LENGTH	(1 << 10)
 #define XHCI_SPURIOUS_REBOOT	(1 << 13)
 #define XHCI_COMP_MODE_QUIRK	(1 << 14)
 #define XHCI_AVOID_BEI		(1 << 15)
 #define XHCI_PLAT		(1 << 16)
 #define XHCI_SLOW_SUSPEND	(1 << 17)
 #define XHCI_SPURIOUS_WAKEUP	(1 << 18)
+#define XHCI_PME_STUCK_QUIRK	(1 << 20)
 /*
  * In Synopsis DWC3 controller, PORTSC register access involves multiple clock
  * domains. When the software does a PORTSC write, handshakes are needed

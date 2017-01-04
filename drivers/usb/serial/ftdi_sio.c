@@ -906,6 +906,7 @@ static struct usb_device_id id_table_combined [] = {
 	{ USB_DEVICE(PI_VID, PI_C725_PID) },
 	{ USB_DEVICE(PI_VID, PI_E517_PID) },
 	{ USB_DEVICE(PI_VID, PI_C863_PID) },
+	{ USB_DEVICE(PI_VID, PI_E861_PID) },
 	{ USB_DEVICE(PI_VID, PI_C867_PID) },
 	{ USB_DEVICE(PI_VID, PI_E609_PID) },
 	{ USB_DEVICE(PI_VID, PI_E709_PID) },

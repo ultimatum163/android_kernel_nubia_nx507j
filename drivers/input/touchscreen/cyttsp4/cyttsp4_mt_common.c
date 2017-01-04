@@ -263,7 +263,7 @@ static int cyttsp4_xy_worker(struct cyttsp4_mt_data *md)
     		md->mt_function.input_report(md->input, ABS_MT_TRACKING_ID,
     			0, CY_OBJ_STANDARD_FINGER);
 
-    	input_report_abs(md->input, ABS_MT_PRESSURE, 1000);
+    	input_report_abs(md->input, ABS_MT_PRESSURE, 300);
 
     	if (md->mt_function.input_sync)
     		md->mt_function.input_sync(md->input);
@@ -308,18 +308,16 @@ cyttsp4_xy_worker_exit:
 static void cyttsp4_mt_send_dummy_event(struct cyttsp4_mt_data *md)
 {
 #if ZTEMT_CYPRESS_WAKEUP_GESTURE_DEBUG
-    input_report_key(md->input, KEY_POWER, 1);
+    input_report_key(md->input, KEY_WAKEUP, 1);
     input_sync(md->input);
 
-    input_report_key(md->input, KEY_POWER, 0);
+    input_report_key(md->input, KEY_WAKEUP, 0);
     input_sync(md->input);
 #else
-    //input_report_key(md->input, KEY_F10, 1);
-    input_report_key(md->input, KEY_POWER, 1);
+    input_report_key(md->input, KEY_F10, 1);
     input_sync(md->input);
 
-    //input_report_key(md->input, KEY_F10, 0);
-    input_report_key(md->input, KEY_POWER, 0);
+    input_report_key(md->input, KEY_F10, 0);
     input_sync(md->input);
 #endif
 #if 0
@@ -610,6 +608,7 @@ static int cyttsp4_setup_input_device(struct cyttsp4_device *ttsp)
 
     /*** ZTEMT Added by luochangyang, 2013/09/11 ***/
     __set_bit(KEY_POWER, md->input->keybit);
+    __set_bit(KEY_WAKEUP, md->input->keybit);
     __set_bit(KEY_F10, md->input->keybit);
     /***ZTEMT END***/
 

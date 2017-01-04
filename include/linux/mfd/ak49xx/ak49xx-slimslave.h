@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -102,7 +102,7 @@ int ak49xx_cfg_slim_sch_rx(struct ak49xx *ak49xx,
 int ak49xx_cfg_slim_sch_tx(struct ak49xx *ak49xx,
 			    struct list_head *ak49xx_ch_list,
 			    unsigned int rate, unsigned int bit_width,
-			    u16 *grph);
+				u16 *grph);
 int ak49xx_close_slim_sch_rx(struct ak49xx *ak49xx,
 			      struct list_head *ak49xx_ch_list, u16 grph);
 int ak49xx_close_slim_sch_tx(struct ak49xx *ak49xx,
@@ -114,9 +114,7 @@ int ak49xx_get_slave_port(unsigned int ch_num);
 int ak49xx_disconnect_port(struct ak49xx *ak49xx,
 			    struct list_head *ak49xx_ch_list, u16 grph);
 int ak49xx_rx_vport_validation(u32 port_id,
-			    struct list_head *codec_dai_list);
+				struct list_head *codec_dai_list);
 int ak49xx_tx_vport_validation(u32 vtable, u32 port_id,
-			    struct ak49xx_codec_dai_data *codec_dai,
-			    u32 num_codec_dais);
+				struct ak49xx_codec_dai_data *codec_dai);
 #endif /* __AK49XX_SLIMSLAVE_H_ */
-

@@ -4,10 +4,10 @@
 
 struct mnt_namespace {
 	atomic_t		count;
-	unsigned int		proc_inum;
+	unsigned int            proc_inum;
 	struct mount *	root;
 	struct list_head	list;
-	struct user_namespace	*user_ns;
+	 struct user_namespace   *user_ns;
 	u64			seq;	/* Sequence number to prevent loops */
 	wait_queue_head_t poll;
 	int event;
@@ -25,6 +25,7 @@ struct mount {
 	struct vfsmount mnt;
 #ifdef CONFIG_SMP
 	struct mnt_pcp __percpu *mnt_pcp;
+	atomic_t mnt_longterm;		/* how many of the refs are longterm */
 #else
 	int mnt_count;
 	int mnt_writers;

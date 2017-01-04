@@ -25,7 +25,6 @@
 #include <linux/ctype.h>
 #include <linux/hrtimer.h>
 #include <linux/platform_device.h>
-#include <asm/uaccess.h>
 #include "synaptics_dsx.h"
 #include "synaptics_dsx_core.h"
 
@@ -82,10 +81,6 @@
 }
 
 #define attrify(propname) (&dev_attr_##propname.attr)
-
-/*add by lixin for restore result in persist*/
-#define TP_FACTORY_RESULT   "/persist/tp/detect/factory_result"
-/*ZTEMT end*/
 
 #define show_prototype(propname)\
 static ssize_t concat(synaptics_rmi4_f54, _##propname##_show)(\
@@ -3086,108 +3081,6 @@ static void synaptics_rmi4_f54_set_regs(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
-
-/*add by lixin for restore result in persist*/
-static int tp_write_cal_file(char *file_path,unsigned int value)
-{
-    struct file *file_p;
-    char write_buf[10];
-	 mm_segment_t old_fs; 
-    int vfs_write_retval=0;
-    if (NULL==file_path)
-    {
-        printk("file_path is NULL\n");  
-    }
-    memset(write_buf, 0, sizeof(write_buf));
-    sprintf(write_buf, "%d\n", value);
-    file_p = filp_open(file_path, O_CREAT|O_RDWR , 0665);
-    if (IS_ERR(file_p))
-    {
-        printk("[open file <%s>failed]\n",file_path);
-        goto error;
-    }
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-    
-    vfs_write_retval = vfs_write(file_p, (char*)write_buf, sizeof(write_buf), &file_p->f_pos);
-    if (vfs_write_retval < 0)
-    {
-        printk("[write file <%s>failed]\n",file_path);
-        goto error;
-    }
-
-    set_fs(old_fs);
-    filp_close(file_p, NULL);
-
-
-    return 1;
-
-error:
-    return -1;
-}
-
-
-static int tp_read_cal_value(char *file_path)
-{
-    struct file *file_p;
-    int vfs_read_retval = 0;
-    mm_segment_t old_fs; 
-    char read_buf[32];
-    unsigned short read_value;
-
-    if (NULL==file_path)
-    {
-        printk("file_path is NULL\n");
-        goto error;
-    }
-
-    memset(read_buf, 0, 32);
-
-    file_p = filp_open(file_path, O_RDONLY , 0665);
-    if (IS_ERR(file_p))
-       {
-           printk("[open file <%s>failed,creat it ]\n",file_path);
-           file_p = filp_open(file_path, O_CREAT|O_RDONLY , 0665);
-           if (IS_ERR(file_p))
-            {
-                printk("[open file <%s>failed too ]\n",file_path);
-                goto error;
-            }
-       }
-
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-    
-    vfs_read_retval = vfs_read(file_p, (char*)read_buf, 16, &file_p->f_pos);
-    if (vfs_read_retval < 0)
-    {
-        printk("[read file <%s>failed]\n",file_path);
-        goto error;
-    }
-
-    set_fs(old_fs);
-    filp_close(file_p, NULL);
-
-    if (kstrtou16(read_buf, 10, &read_value) < 0)
-    {
-        printk("[kstrtou16 %s failed]\n",read_buf);
-        goto error;
-    }
-    
-    printk("[the content of %s is %s]\n", file_path, read_buf);
-
-    return read_value;
-
-error:
-    return -1;
-}
-
-
-/*ZTEMT end*/
-
-
-
-
 /*luochangyang for factory_result 2014/04/05*/
 static int _synaptics_rmi4_f54_factory_result_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -3314,26 +3207,12 @@ static ssize_t synaptics_rmi4_f54_factory_result_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	int retval = 0;
-    int err = 0;
 	retval = _synaptics_rmi4_f54_factory_result_show(dev, attr, buf);
     msleep(2500);
     retval = _synaptics_rmi4_f54_factory_result_show(dev, attr, buf);
 	printk("[factory_result 1] retval = %d\n",retval);
 	//snprintf(buf, PAGE_SIZE, "%u\n", retval<0?0:1);//0:four bytes;(char)0:one byte
-
-    /*add by lixin for restore result in persist*/
-    if((tp_read_cal_value(TP_FACTORY_RESULT))!=7)
-        {
-            printk("TP_FACTORY_RESULT != 7\n");
-            err=tp_write_cal_file(TP_FACTORY_RESULT,7);
-            if(err<0)
-                {
-                    printk("ERROR=%s\n",TP_FACTORY_RESULT);
-                }
-        }
-    /*ZTEMT end*/
-    
-    return snprintf(buf, PAGE_SIZE, "%u\n", (char)(retval == 0? 0:1));
+	return snprintf(buf, PAGE_SIZE, "%u\n", (char)(retval == 0? 0:1));
 }
 /*luochangyang END*/
 

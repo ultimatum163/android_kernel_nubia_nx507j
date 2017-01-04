@@ -41,10 +41,36 @@
 	};
 
 	qcom,hdmi_tx@fd922100 {
-		status = "disabled";
+		status = "ok";
+	};
+
+	switch-gpio {
+		compatible = "nubia,switch-gpio";
+		input-name = "switch-gpio";
+		gpios = <&msmgpio 54 0>;
+	};
+
+ 	i2c@f9923000 {
+        	sii8620@72 {
+		        status = "okay";
+		        compatible = "sii8620drv";
+		        reg = <0x72>;
+			 interrupt-parent = <&msmgpio>;
+		 	#interrupts = <27 0x3>;
+		 	#anx7808-pdown-gpio = <&msmgpio 26 0x00>;
+		 	interrupts = <102 0x3>;
+		 	sii8620-reset-gpio = <&msmgpio 78 0x00>;
+		 	sii8620-int-gpio = <&msmgpio 102 0x00>;
+		 	qcom,hdmi-tx-map = <&mdss_hdmi_tx>;
+			#anx7808-cbl-gpio = <&msmgpio 27 0x00>;
+			#anx7808-v10-gpio = <&msmgpio 14 0x00>;
+		 	#smps3a-supply = <&pm8941_s3>;
+			#vreg_l18-supply = <&pm8941_l18>;
+		};
 	};
 
 	i2c@f9924000 {
+		/*ZTEMT Added by luochangyang, 2013/12/19*/
 		cyttsp_i2c_adapter@24 {
 			compatible = "cy,cyttsp5_i2c_adapter";
 			reg = <0x24>;
@@ -151,21 +177,21 @@
 			};
 		};
 	};
-
-	i2c@f9928000 {
-		broadcom_bcm2079x_nfc@0x77 {
-			compatible = "broadcom,bcm2079x_nfc";
-			reg = <0x77>;
-			//vdd_swp-supply = <&pm8941_l9>;
-			interrupt-parent = <&msmgpio>;
-			//interrupts = <59 0x1>;
-			interrupts = <59 0x1>;
-			broadcom,clk-gpio = <&pm8941_gpios 32 0x00>;
+        i2c@f9928000 {
+               broadcom_bcm2079x_nfc@0x77 {
+                       compatible = "broadcom,bcm2079x_nfc";
+                       reg = <0x77>;
+                       //vdd_swp-supply = <&pm8941_l9>;
+                       interrupt-parent = <&msmgpio>;
+                       //interrupts = <59 0x1>;
+                       interrupts = <59 0x1>;
+                       broadcom,clk-gpio = <&pm8941_gpios 32 0x00>;
             broadcom,en-gpio = <&msmgpio 85 0x00>;
-			broadcom,wake-gpio = <&msmgpio 13 0x00>;
-			broadcom,irq-gpio = <&msmgpio 59 0x01>;
-		};
-	};
+                       broadcom,wake-gpio = <&msmgpio 13 0x00>;
+                       broadcom,irq-gpio = <&msmgpio 59 0x01>;
+               };
+       };
+
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
 		label = "atmel_mxt_ts";
@@ -204,7 +230,6 @@
 			vcc_i2c-supply = <&pm8941_lvs1>;
 		};
 		/*luochangyang END*/
-               
 	};
 
 	i2c@f9967000 {
@@ -241,17 +266,6 @@
 	                compatible = "ams,ams-sensor";
 	                interrupt-parent = <&msmgpio>;
 	                ams,irq-gpio = <&msmgpio 9 0x00>;
-	                ams,light-percent = <300>;
-
-	                //for tmg3993
-	                ams,prox-offset-cal-ability-tmg399x = <15>;
-	                ams,prox-led-plus-cnt-tmg399x = <4>;
-	                ams,gesture-offset-cal-ability-tmg399x = <40>;
-	                ams,gesture-led-plus-cnt-tmg399x = <4>;
-
-	                //for tmd2772
-	                ams,prox-offset-cal-ability-tmd2772 = <8>;
-	                ams,prox-led-plus-cnt-tmd2772 = <12>;
 	        };
 
 	        maxq616_i2c_adapter@11 {
@@ -278,6 +292,7 @@
 
 		};
     };
+
 
 	gpio_keys {
 		compatible = "gpio-keys";
@@ -337,16 +352,50 @@
 		compatible = "qcom,msm8974-audio-ak4961";
 		qcom,model = "msm8974-ak4961-snd-card";
 		qcom,mbhc-gpio-level-insert = <0>;
+		qcom,hdmi-audio-rx;
 		qcom,mbhc-disabled = <1>;
 		qcom,cdc-mclk-gpios = <&pm8941_gpios 15 0>;
+		taiko-mclk-clk = <&pm8941_clkdiv1>;
 		qcom,ak4961-mclk-clk-freq = <9600000>;
 		qcom,mbhc-switch-enable-gpio = <&msmgpio 96 0>;
+	};
+
+	hsic_host: hsic@f9a00000 {
+		compatible = "qcom,hsic-host";
+		reg = <0xf9a00000 0x400>;
+		#address-cells = <0>;
+		interrupt-parent = <&hsic_host>;
+		interrupts = <0 1 2>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xffffffff>;
+		interrupt-map = <0 &intc 0 136 0
+			1 &intc 0 148 0
+			2 &msmgpio 144 0x8>;
+		interrupt-names = "core_irq", "async_irq", "wakeup";
+		hsic_vdd_dig-supply = <&pm8841_s2_corner>;
+		HSIC_GDSC-supply = <&gdsc_usb_hsic>;
+		hsic,strobe-gpio = <&msmgpio 144 0x00>;
+		hsic,data-gpio = <&msmgpio 145 0x00>;
+		hsic,resume-gpio = <&msmgpio 80 0x00>;
+		hsic,ignore-cal-pad-config;
+		hsic,strobe-pad-offset = <0x2050>;
+		hsic,data-pad-offset = <0x2054>;
+		qcom,phy-susp-sof-workaround;
+		hsic,vdd-voltage-level = <1 5 7>;
+
+		qcom,msm-bus,name = "hsic";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<85 512 0 0>,
+				<85 512 40000 160000>;
 	};
 };
 
 &pm8941_lsid1 {
 	qcom,leds@d800 {
-		status = "okay";	
+		status = "okay";
+		/*
 		qcom,wled_0 {
 			label = "wled";
 			linux,name = "wled:backlight";
@@ -354,15 +403,16 @@
 			qcom,cs-out-en;
 			qcom,op-fdbck = <1>;
 			qcom,default-state = "on";
-			qcom,max-current = <25>;
+			qcom,max-current = <21>;
 			qcom,ctrl-delay-us = <0>;
 			qcom,boost-curr-lim = <5>;
 			qcom,cp-sel = <0>;
 			qcom,switch-freq = <11>;
 			qcom,ovp-val = <2>;
-			qcom,num-strings = <3>;
+			qcom,num-strings = <2>;
 			qcom,id = <0>;
 		};
+		*/
 	};
 
 	qcom,leds@d900 {
@@ -506,9 +556,10 @@
 	mtp_batterydata: qcom,battery-data {
 		qcom,rpull-up-kohm = <100>;
 		qcom,vref-batt-therm = <1800000>;
-
+		/***  ZTEMT_CHARGE modify
 		/include/ "../batterydata-palladium.dtsi"
 		/include/ "../batterydata-mtp-3000mah.dtsi"
+		***/
 	};
 };
 
@@ -761,7 +812,7 @@
 	gpio@df00 { /* GPIO 32 */
 		qcom,mode = <0>;        /* QPNP_PIN_MODE_DIG_IN */
 		qcom,pull = <4>;	/* QPNP_PIN_PULL_DN */
-		qcom,vin-sel = <2>; /*add PM8941 s3 = 1.8V */
+                qcom,vin-sel = <2>; /*add PM8941 s3 = 1.8V */
 		qcom,master-en = <1>;
 	};
 
@@ -833,7 +884,7 @@
 
 &slim_msm {
 	ak4961_codec {
-		akm,cdc-micbias-mpwr1-mv = <0>;
+		akm,cdc-micbias-mpwr1-mv = <2800>;
 		akm,cdc-micbias-mpwr2-mv = <2800>;
 	};
 };

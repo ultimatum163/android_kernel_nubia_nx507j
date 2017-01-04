@@ -139,6 +139,7 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	if (pressure >= 95) {
 		other_file = global_page_state(NR_FILE_PAGES) -
 			global_page_state(NR_SHMEM) -
+			global_page_state(NR_UNEVICTABLE) -
 			total_swapcache_pages;
 		other_free = global_page_state(NR_FREE_PAGES);
 
@@ -152,6 +153,7 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 
 		other_file = global_page_state(NR_FILE_PAGES) -
 			global_page_state(NR_SHMEM) -
+			global_page_state(NR_UNEVICTABLE) -
 			total_swapcache_pages;
 
 		other_free = global_page_state(NR_FREE_PAGES);
@@ -272,6 +274,35 @@ void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
 	}
 }
 
+#ifdef CONFIG_HIGHMEM
+void adjust_gfp_mask(gfp_t *gfp_mask)
+{
+	struct zone *preferred_zone;
+	struct zonelist *zonelist;
+	enum zone_type high_zoneidx;
+
+	if (current_is_kswapd()) {
+		zonelist = node_zonelist(0, *gfp_mask);
+		high_zoneidx = gfp_zone(*gfp_mask);
+		first_zones_zonelist(zonelist, high_zoneidx, NULL,
+				&preferred_zone);
+
+		if (high_zoneidx == ZONE_NORMAL) {
+			if (zone_watermark_ok_safe(preferred_zone, 0,
+					high_wmark_pages(preferred_zone), 0,
+					0))
+				*gfp_mask |= __GFP_HIGHMEM;
+		} else if (high_zoneidx == ZONE_HIGHMEM) {
+			*gfp_mask |= __GFP_HIGHMEM;
+		}
+	}
+}
+#else
+void adjust_gfp_mask(gfp_t *unused)
+{
+}
+#endif
+
 void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 {
 	gfp_t gfp_mask;
@@ -282,6 +313,8 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 	int use_cma_pages;
 
 	gfp_mask = sc->gfp_mask;
+	adjust_gfp_mask(&gfp_mask);
+
 	zonelist = node_zonelist(0, gfp_mask);
 	high_zoneidx = gfp_zone(gfp_mask);
 	first_zones_zonelist(zonelist, high_zoneidx, NULL, &preferred_zone);
@@ -364,6 +397,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		global_page_state(NR_FILE_PAGES))
 		other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM) -
+						global_page_state(NR_UNEVICTABLE) -
 						total_swapcache_pages;
 	else
 		other_file = 0;
@@ -500,8 +534,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		}
 
 		lowmem_deathpending_timeout = jiffies + HZ;
-		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
+		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 		rcu_read_unlock();
 		/* give the system time to free up the memory */

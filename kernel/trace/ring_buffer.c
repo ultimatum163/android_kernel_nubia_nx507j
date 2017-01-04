@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2008 Steven Rostedt <srostedt@redhat.com>
  */
+
 #include <linux/ring_buffer.h>
 #include <linux/trace_clock.h>
 #include <linux/spinlock.h>

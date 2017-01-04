@@ -53,22 +53,7 @@ config BOARD_ZTEMT_NX507J
 config BOARD_ZTEMT_NX503A
 	bool "ZTEMT NX503A"
 	help
-	  Support for the ZTEMT NX503A board.
-
-config BOARD_ZTEMT_NX514J
-	bool "ZTEMT NX514J"
-	help
-	  Support for the ZTEMT NX514J board.
-
-config BOARD_ZTEMT_NX515J
-	bool "ZTEMT NX515J"
-	help
-	  Support for the ZTEMT NX515J board.
-
-config BOARD_ZTEMT_NX516J
-	bool "ZTEMT NX516J"
-	help
-	  Support for the ZTEMT NX516J board.
+	  Support for the ZTEMT NX503A board.	
 endchoice	
 
 config ZTEMT_RESTART

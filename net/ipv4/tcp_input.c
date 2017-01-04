@@ -68,7 +68,6 @@
 #include <linux/module.h>
 #include <linux/sysctl.h>
 #include <linux/kernel.h>
-#include <linux/reciprocal_div.h>
 #include <net/dst.h>
 #include <net/tcp.h>
 #include <net/inet_common.h>
@@ -3710,7 +3709,7 @@ static void tcp_send_challenge_ack(struct sock *sk)
 
 		challenge_timestamp = now;
 		ACCESS_ONCE(challenge_count) = half +
-			(u32)(((u64)random32() * sysctl_tcp_challenge_ack_limit) >> 32);
+			    (u32)(((u64)random32() * sysctl_tcp_challenge_ack_limit) >> 32);
 	}
 	count = ACCESS_ONCE(challenge_count);
 	if (count > 0) {
@@ -5234,7 +5233,7 @@ static int tcp_copy_to_iovec(struct sock *sk, struct sk_buff *skb, int hlen)
 		err = skb_copy_datagram_iovec(skb, hlen, tp->ucopy.iov, chunk);
 	else
 		err = skb_copy_and_csum_datagram_iovec(skb, hlen,
-						       tp->ucopy.iov, chunk);
+						       tp->ucopy.iov);
 
 	if (!err) {
 		tp->ucopy.len -= chunk;

@@ -33,6 +33,7 @@
 #include "../clock-mdss-8974.h"
 #include "../clock.h"
 
+
 enum {
 	GCC_BASE,
 	MMSS_BASE,
@@ -1482,6 +1483,9 @@ static struct clk_freq_tbl ftbl_gcc_gp_clk[] = {
 	F(16000000, gpll0,  1,  2,  75),
 	F(19200000,   cxo,  1,  0,   0),
 	F(24000000, gpll0,  5,  1,   5),
+	#ifdef CONFIG_SLIMPORT_ANX7808
+	F(27000000,  gpll0,   1,   9,  200),
+	#endif
 	F_END
 };
 
@@ -1653,7 +1657,6 @@ static struct rcg_clk tsif_ref_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_gcc_usb30_mock_utmi_clk[] = {
-	F(48000000,  gpll0, 12.5,   0,   0),
 	F(60000000,  gpll0,   10,   0,   0),
 	F_END
 };
@@ -4876,13 +4879,6 @@ static struct clk_lookup msm_clocks_8974pro_only[] __initdata = {
 #ifdef CONFIG_IMX135_GBAO
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "200.qcom,camera"),
 #endif
-#ifdef CONFIG_IMX214_LC898122
-	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "35.qcom,camera"),
-#endif
-#ifdef CONFIG_IMX214_OIS_SHARP
-	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "36.qcom,camera"),
-	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "36.qcom,eeprom"),
-#endif
 #ifdef CONFIG_IMX135_GBAO_LC898122
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "122.qcom,camera"),
 #endif
@@ -4892,13 +4888,6 @@ static struct clk_lookup msm_clocks_8974pro_only[] __initdata = {
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "20.qcom,camera"),
 #ifdef CONFIG_IMX135_GBAO
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "200.qcom,camera"),
-#endif
-#ifdef CONFIG_IMX214_LC898122
-	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "35.qcom,camera"),
-#endif
-#ifdef CONFIG_IMX214_OIS_SHARP
-	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "36.qcom,camera"),	
-    CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "36.qcom,eeprom"),
 #endif
 #ifdef CONFIG_IMX135_GBAO_LC898122
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "122.qcom,camera"),
@@ -4948,8 +4937,19 @@ static struct clk_lookup msm_clocks_8974_common[] __initdata = {
 	CLK_LOOKUP("xo",       cxo_dwc3_clk.c,                 "msm_dwc3"),
 	CLK_LOOKUP("xo",  cxo_ehci_host_clk.c,            "msm_ehci_host"),
 	CLK_LOOKUP("xo",        cxo_lpm_clk.c,        "fc4281d0.qcom,mpm"),
-	CLK_LOOKUP("ref_clk",  cxo_d1_a_pin.c,                   "3-000e"),
-	CLK_LOOKUP("ref_clk_rf", cxo_a2_a_pin.c,                 "3-000e"),
+//#ifdef CONFIG_PN547_NFC
+	//add by chengdongsheng for NFC-pn547 CLK 19.2M
+	CLK_LOOKUP("nfc_rf_clk",cxo_d1_pin.c, "3-0028"),
+	
+//#endif
+
+#ifdef CONFIG_BCM2079X_I2C
+#endif
+
+#ifdef CONFIG_NFC_QNCI
+	//CLK_LOOKUP("ref_clk",  cxo_d1_a_pin.c,                   "3-000e"),
+	//CLK_LOOKUP("ref_clk_rf", cxo_a2_a_pin.c,                 "3-000e"),
+#endif
 	CLK_LOOKUP("measure",	measure_clk.c,	"debug"),
 
 	CLK_LOOKUP("hfpll_src", cxo_a_clk_src.c,   "f9016000.qcom,clock-krait"),
@@ -5029,16 +5029,10 @@ static struct clk_lookup msm_clocks_8974_common[] __initdata = {
 	CLK_LOOKUP("bus_clk",      gcc_ce2_axi_clk.c,     "qcedev.0"),
 	CLK_LOOKUP("core_clk_src", ce2_clk_src.c,         "qcedev.0"),
 
-
-	CLK_LOOKUP("core_clk",     gcc_ce2_clk.c,     "fd440000.qcom,qcrypto"),
-	CLK_LOOKUP("iface_clk",    gcc_ce2_ahb_clk.c, "fd440000.qcom,qcrypto"),
-	CLK_LOOKUP("bus_clk",      gcc_ce2_axi_clk.c, "fd440000.qcom,qcrypto"),
-	CLK_LOOKUP("core_clk_src", ce2_clk_src.c,     "fd440000.qcom,qcrypto"),
-
-	CLK_LOOKUP("core_clk",     gcc_ce2_clk.c,     "fd440000.qcom,qcrypto1"),
-	CLK_LOOKUP("iface_clk",    gcc_ce2_ahb_clk.c, "fd440000.qcom,qcrypto1"),
-	CLK_LOOKUP("bus_clk",      gcc_ce2_axi_clk.c, "fd440000.qcom,qcrypto1"),
-	CLK_LOOKUP("core_clk_src", ce2_clk_src.c,     "fd440000.qcom,qcrypto1"),
+	CLK_LOOKUP("core_clk",     gcc_ce2_clk.c,     "qcrypto.0"),
+	CLK_LOOKUP("iface_clk",    gcc_ce2_ahb_clk.c, "qcrypto.0"),
+	CLK_LOOKUP("bus_clk",      gcc_ce2_axi_clk.c, "qcrypto.0"),
+	CLK_LOOKUP("core_clk_src", ce2_clk_src.c,     "qcrypto.0"),
 
 	CLK_LOOKUP("core_clk",     gcc_ce1_clk.c,         "qseecom"),
 	CLK_LOOKUP("iface_clk",    gcc_ce1_ahb_clk.c,     "qseecom"),
@@ -5062,7 +5056,11 @@ static struct clk_lookup msm_clocks_8974_common[] __initdata = {
 
 	CLK_LOOKUP("core_clk", gcc_gp1_clk.c, ""),
 	CLK_LOOKUP("core_clk", gcc_gp2_clk.c, ""),
+	#ifdef CONFIG_SLIMPORT_ANX7808
+	CLK_LOOKUP("core_clk", gcc_gp3_clk.c, "1-0072"),
+	#else
 	CLK_LOOKUP("core_clk", gcc_gp3_clk.c, ""),
+	#endif
 
 	CLK_LOOKUP("core_clk", gcc_pdm2_clk.c, ""),
 	CLK_LOOKUP("iface_clk", gcc_pdm_ahb_clk.c, ""),
@@ -5083,7 +5081,6 @@ static struct clk_lookup msm_clocks_8974_common[] __initdata = {
 	CLK_LOOKUP("mem_clk", gcc_usb30_master_clk.c,           "usb_bam"),
 	CLK_LOOKUP("mem_iface_clk", gcc_sys_noc_usb3_axi_clk.c, "usb_bam"),
 	CLK_LOOKUP("core_clk", gcc_usb30_master_clk.c,    "msm_dwc3"),
-	CLK_LOOKUP("utmi_clk_src", usb30_mock_utmi_clk_src.c, "msm_dwc3"),
 	CLK_LOOKUP("utmi_clk", gcc_usb30_mock_utmi_clk.c, "msm_dwc3"),
 	CLK_LOOKUP("iface_clk", gcc_sys_noc_usb3_axi_clk.c, "msm_dwc3"),
 	CLK_LOOKUP("iface_clk", gcc_sys_noc_usb3_axi_clk.c, "msm_usb3"),
@@ -5127,10 +5124,6 @@ static struct clk_lookup msm_clocks_8974_common[] __initdata = {
 	CLK_LOOKUP("pixel_clk", mdss_pclk1_clk.c, "fd922e00.qcom,mdss_dsi"),
 	CLK_LOOKUP("mdp_core_clk", mdss_mdp_clk.c, "fd922800.qcom,mdss_dsi"),
 	CLK_LOOKUP("mdp_core_clk", mdss_mdp_clk.c, "fd922e00.qcom,mdss_dsi"),
-	CLK_LOOKUP("core_mmss_clk", mmss_misc_ahb_clk.c,
-		"fd922800.qcom,mdss_dsi"),
-	CLK_LOOKUP("core_mmss_clk", mmss_misc_ahb_clk.c,
-		"fd922e00.qcom,mdss_dsi"),
 	CLK_LOOKUP("iface_clk", mdss_ahb_clk.c, "fd922100.qcom,hdmi_tx"),
 	CLK_LOOKUP("alt_iface_clk", mdss_hdmi_ahb_clk.c,
 		"fd922100.qcom,hdmi_tx"),
@@ -5765,6 +5758,14 @@ static void __init msm8974_clock_post_init(void)
 	clk_set_rate(&esc1_clk_src.c, esc1_clk_src.freq_tbl[0].freq_hz);
 	clk_set_rate(&hdmi_clk_src.c, hdmi_clk_src.freq_tbl[0].freq_hz);
 	clk_set_rate(&vsync_clk_src.c, vsync_clk_src.freq_tbl[0].freq_hz);
+	#ifdef CONFIG_SLIMPORT_ANX7808
+	clk_set_rate(&gp3_clk_src.c, gp3_clk_src.freq_tbl[8].freq_hz);
+	#if 0
+	clk_set_rate(&slimport_clk_src.c,
+	slimport_clk_src.freq_tbl[0].freq_hz);
+	clk_prepare_enable(&slimport_clk_src.c);
+	#endif
+	#endif
 }
 
 #define GCC_CC_PHYS		0xFC400000
@@ -5814,8 +5815,6 @@ static void __init msm8974_v2_clock_override(void)
 	vcodec0_clk_src.c.fmax[VDD_DIG_HIGH] = 465000000;
 
 	mdp_clk_src.c.fmax[VDD_DIG_NOMINAL] = 240000000;
-
-	gcc_usb30_mock_utmi_clk.max_div = 3;
 
 	/* The parent of each of the QUP I2C clocks is an RCG on V2 */
 	for (i = 0; i < ARRAY_SIZE(qup_i2c_clks); i++)

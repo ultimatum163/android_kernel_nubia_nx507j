@@ -46,7 +46,6 @@
 #include <linux/workqueue.h>
 #include "cyttsp4_device_access.h"
 #include "cyttsp4_regs.h"
-#include <asm/uaccess.h>
 
 #define CY_MAX_CONFIG_BYTES    256
 #define CY_CMD_INDEX             0
@@ -55,9 +54,6 @@
 #define CY_NULL_CMD_SIZE_INDEX   3
 #define CY_NULL_CMD_SIZEL_INDEX  2
 #define CY_NULL_CMD_SIZEH_INDEX  3
-/*add by lixin for restore result in persist*/
-#define TP_FACTORY_RESULT   "/persist/tp/detect/factory_result"
-/*ZTEMT end*/
 
 struct heatmap_param {
 	bool scan_start;
@@ -1457,104 +1453,6 @@ cyttsp4_ic_grpdata_store_exit:
 	return size;
 }
 
-/*add by lixin for restore result in persist*/
-static int tp_write_cal_file(char *file_path,unsigned int value)
-{
-    struct file *file_p;
-    char write_buf[10];
-	 mm_segment_t old_fs; 
-    int vfs_write_retval=0;
-    if (NULL==file_path)
-    {
-        printk("file_path is NULL\n");  
-    }
-    memset(write_buf, 0, sizeof(write_buf));
-    sprintf(write_buf, "%d\n", value);
-    file_p = filp_open(file_path, O_CREAT|O_RDWR , 0665);
-    if (IS_ERR(file_p))
-    {
-        printk("[open file <%s> failed .]\n",file_path);
-        goto error;
-    }
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-    
-    vfs_write_retval = vfs_write(file_p, (char*)write_buf, sizeof(write_buf), &file_p->f_pos);
-    if (vfs_write_retval < 0)
-    {
-        printk("[write file <%s>failed]\n",file_path);
-        goto error;
-    }
-
-    set_fs(old_fs);
-    filp_close(file_p, NULL);
-
-
-    return 1;
-
-error:
-    return -1;
-}
-
-
-static int tp_read_cal_value(char *file_path)
-{
-    struct file *file_p;
-    int vfs_read_retval = 0;
-    mm_segment_t old_fs; 
-    char read_buf[32];
-    unsigned short read_value;
-
-    if (NULL==file_path)
-    {
-        printk("file_path is NULL\n");
-        goto error;
-    }
-
-    memset(read_buf, 0, 32);
-
-    file_p = filp_open(file_path, O_RDONLY , 0665);
-    if (IS_ERR(file_p))
-       {
-           printk("[open file <%s>failed,creat it ]\n",file_path);
-           file_p = filp_open(file_path, O_CREAT|O_RDONLY , 0665);
-           if (IS_ERR(file_p))
-            {
-                printk("[open file <%s>failed too ]\n",file_path);
-                goto error;
-            }
-       }
-
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-    
-    vfs_read_retval = vfs_read(file_p, (char*)read_buf, 16, &file_p->f_pos);
-    if (vfs_read_retval < 0)
-    {
-        printk("[read file <%s>failed]\n",file_path);
-        goto error;
-    }
-
-    set_fs(old_fs);
-    filp_close(file_p, NULL);
-
-    if (kstrtou16(read_buf, 10, &read_value) < 0)
-    {
-        printk("[kstrtou16 %s failed]\n",read_buf);
-        goto error;
-    }
-    
-    printk("[the content of %s is %s]\n", file_path, read_buf);
-
-    return read_value;
-
-error:
-    return -1;
-}
-
-
-/*ZTEMT end*/
-
 static DEVICE_ATTR(ic_grpdata, S_IRUSR | S_IWUSR,
 	cyttsp4_ic_grpdata_show, cyttsp4_ic_grpdata_store);
 
@@ -1588,7 +1486,6 @@ static ssize_t cyttsp4_ic_grpdetect_show(struct device *dev,
     struct cyttsp4_device_access_data *dad = dev_get_drvdata(dev);
     int index;
     int retval = 0;
-    int err = 0;
 
     dev_vdbg(dev, "%s: grpnum=%d grpoffset=%u\n",
 			__func__, dad->ic_grpnum, dad->ic_grpoffset);
@@ -1665,17 +1562,6 @@ exit:
     /*Read status and confirm operational mode*/
     index = cyttsp4_ic_grpdata_show(dev, attr, buf);
     dev_vdbg(dev, "%s: %s index=%d\n", __func__, buf, index);
-/*add by lixin for restore result in persist*/
-    if((tp_read_cal_value(TP_FACTORY_RESULT))!=7)
-        {
-		    printk("TP_FACTORY_RESULT != 7\n");
-		    err=tp_write_cal_file(TP_FACTORY_RESULT,7);
-			if(err<0)
-            {
-                printk("ERROR=%s\n",TP_FACTORY_RESULT);
-            }
-        }
-/*ZTEMT end*/
 
     return snprintf(buf, PAGE_SIZE, "%d\n", retval);
 }

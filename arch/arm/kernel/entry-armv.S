@@ -443,22 +443,27 @@ __und_usr:
 	mov	r2, r4
 	mov	r3, r5
 
+	
 	@ r2 = regs->ARM_pc, which is either 2 or 4 bytes ahead of the
 	@      faulting instruction depending on Thumb mode.
 	@ r3 = regs->ARM_cpsr
-	@
 	@ The emulation code returns using r9 if it has emulated the
 	@ instruction, or the more conventional lr if we are to treat
 	@ this as a real undefined instruction
 	@
 	adr	r9, BSYM(ret_from_exception)
 
+	@ IRQs must be enabled before attempting to read the instruction from
+	@ user space since that could cause a page/translation fault if the
+	@ page table was modified by another CPU.
+	enable_irq
+
 	tst	r3, #PSR_T_BIT			@ Thumb mode?
 	bne	__und_usr_thumb
 	sub	r4, r2, #4			@ ARM instr at LR - 4
 1:	ldrt	r0, [r4]
 #ifdef CONFIG_CPU_ENDIAN_BE8
-	rev	r0, r0				@ little endian instruction
+	reveq	r0, r0				@ little endian instruction
 #endif
 	@ r0 = 32-bit ARM instruction which caused the exception
 	@ r2 = PC value for the following instruction (:= regs->ARM_pc)

@@ -15,10 +15,9 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_fdt.h>
+#include <linux/mfd/wcd9xxx/core.h>
 #ifdef CONFIG_AK4961_CODEC
 #include <linux/mfd/ak49xx/core.h>
-#else
-#include <linux/mfd/wcd9xxx/core.h>
 #endif
 #include <asm/arch_timer.h>
 #include <asm/mach/time.h>

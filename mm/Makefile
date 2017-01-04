@@ -15,7 +15,6 @@ obj-y			:= filemap.o mempool.o oom_kill.o fadvise.o \
 			   page_isolation.o mm_init.o mmu_context.o percpu.o \
 			   compaction.o $(mmu-y) \
 			   showmem.o vmpressure.o
-
 obj-y += init-mm.o
 
 ifdef CONFIG_NO_BOOTMEM
@@ -52,3 +51,4 @@ obj-$(CONFIG_HWPOISON_INJECT) += hwpoison-inject.o
 obj-$(CONFIG_DEBUG_KMEMLEAK) += kmemleak.o
 obj-$(CONFIG_DEBUG_KMEMLEAK_TEST) += kmemleak-test.o
 obj-$(CONFIG_CLEANCACHE) += cleancache.o
+obj-$(CONFIG_ZSMALLOC)	+= zsmalloc.o

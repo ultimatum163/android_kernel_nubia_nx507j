@@ -54,11 +54,6 @@
 
 #define SCM_IO_DISABLE_PMIC_ARBITER	1
 
-#ifdef CONFIG_ZTEMT_PANIC_BOOTMODE
-/* This flag must be the same as in aboot */
-#define PANIC_MODE           0x77665523
-#endif
-
 #ifdef CONFIG_MSM_RESTART_V2
 #define use_restart_v2()	1
 #else
@@ -316,14 +311,6 @@ static void msm_restart_prepare(const char *cmd)
 	/* for menu reboot, the cmd is NULL, default 0x77665501. */
 	else {
 		__raw_writel(0x77665501, restart_reason);
-	}
-#endif
-
-#ifdef CONFIG_ZTEMT_PANIC_BOOTMODE
-	if(in_panic)
-	{
-		printk(KERN_EMERG" set panic reboot reason\n");
-		__raw_writel(PANIC_MODE, restart_reason);
 	}
 #endif
 

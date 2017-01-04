@@ -23,7 +23,7 @@
 
 /* Fixed constants first: */
 #undef NR_OPEN
-#define INR_OPEN_CUR 1024	/* Initial setting for nfile rlimits */
+#define INR_OPEN_CUR 2048	/* Initial setting for nfile rlimits */
 #define INR_OPEN_MAX 4096	/* Hard limit for nfile rlimits */
 
 #define BLOCK_SIZE_BITS 10
@@ -113,6 +113,9 @@ struct inodes_stat_t {
 
 /* File is opened with O_PATH; almost nothing can be done with it */
 #define FMODE_PATH		((__force fmode_t)0x4000)
+
+/* File hasn't page cache and can't be mmaped, for stackable filesystem */
+#define FMODE_NONMAPPABLE       ((__force fmode_t)0x400000)
 
 /* File was opened by fanotify and shouldn't generate fanotify events */
 #define FMODE_NONOTIFY		((__force fmode_t)0x1000000)
@@ -300,7 +303,9 @@ struct inodes_stat_t {
 #define BLKSSZGET  _IO(0x12,104)/* get block device sector size */
 #if 0
 #define BLKPG      _IO(0x12,105)/* See blkpg.h */
+
 /* Some people are morons.  Do not use sizeof! */
+
 #define BLKELVGET  _IOR(0x12,106,size_t)/* elevator get */
 #define BLKELVSET  _IOW(0x12,107,size_t)/* elevator set */
 /* This was here just to show that the number is taken -
@@ -1650,6 +1655,7 @@ struct file_operations {
 	int (*setlease)(struct file *, long, struct file_lock **);
 	long (*fallocate)(struct file *file, int mode, loff_t offset,
 			  loff_t len);
+	struct file* (*get_lower_file)(struct file *f);
 };
 
 struct inode_operations {
@@ -1859,13 +1865,13 @@ int sync_inode_metadata(struct inode *inode, int wait);
 struct file_system_type {
 	const char *name;
 	int fs_flags;
-#define FS_REQUIRES_DEV		1 
-#define FS_BINARY_MOUNTDATA	2
-#define FS_HAS_SUBTYPE		4
-#define FS_USERNS_MOUNT		8	/* Can be mounted by userns root */
-#define FS_USERNS_DEV_MOUNT	16 /* A userns mount does not imply MNT_NODEV */
-#define FS_REVAL_DOT		16384	/* Check the paths ".", ".." for staleness */
-#define FS_RENAME_DOES_D_MOVE	32768	/* FS will handle d_move() during rename() internally. */
+#define FS_REQUIRES_DEV                1
+#define FS_BINARY_MOUNTDATA    2
+#define FS_HAS_SUBTYPE         4
+#define FS_USERNS_MOUNT                8       /* Can be mounted by userns root */
+#define FS_USERNS_DEV_MOUNT    16 /* A userns mount does not imply MNT_NODEV */
+#define FS_REVAL_DOT           16384   /* Check the paths ".", ".." for staleness */
+#define FS_RENAME_DOES_D_MOVE  32768   /* FS will handle d_move() during rename() internally. */
 	struct dentry *(*mount) (struct file_system_type *, int,
 		       const char *, void *);
 	void (*kill_sb) (struct super_block *);

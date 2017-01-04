@@ -57,11 +57,7 @@
 
 		qcom,pon_1 {
 			qcom,pon-type = <0>;
-			qcom,support-reset = <1>;
 			qcom,pull-up = <1>;
-			qcom,s1-timer = <10256>;
-			qcom,s2-timer = <2000>;
-			qcom,s2-type = <1>;
 			linux,code = <116>;
 		};
 /* Removed by yfliu, for PWK
@@ -198,11 +194,11 @@
 		compatible = "qcom,qpnp-charger";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		status = "disabled";
-
-		qcom,vddmax-mv = <4200>;
-		qcom,vddsafe-mv = <4230>;
-		qcom,vinmin-mv = <4300>;
+		status = "okay";
+		//ZTEMT wang.shuai
+		qcom,vddmax-mv = <4360>;  //4200 -> 4360
+		qcom,vddsafe-mv = <4380>;  //4230 -> 4380
+		qcom,vinmin-mv = <4400>;  //4300 -> 4400
 		qcom,ibatmax-ma = <1500>;
 		qcom,ibatterm-ma = <100>;
 		qcom,ibatsafe-ma = <1500>;
@@ -220,8 +216,12 @@
 		qcom,chg-iadc = <&pm8941_iadc>;
 		qcom,chg-adc_tm = <&pm8941_adc_tm>;
 		qcom,ibat-calibration-enabled;
-
-		pm8941_chg_chgr: qcom,chgr@1000 {
+		qcom,charging-disabled = <1>;
+        //ZTEMT ADD by swang
+		qcom,batt-hot-percentage = <25>;
+		qcom,batt-cold-percentage = <80>;
+        //ZTEMT end
+		qcom,chgr@1000 {
 			status = "disabled";
 			reg = <0x1000 0x100>;
 			interrupts =	<0x0 0x10 0x0>,
@@ -318,6 +318,13 @@
 		};
 	};
 
+    ztemt_hw_version{
+		spmi-dev-container;
+		compatible = "qcom,qpnp-ztemt_hw_version";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		status = "ok";		
+	};
 	pm8941_gpios: gpios {
 		spmi-dev-container;
 		compatible = "qcom,qpnp-pin";
@@ -839,6 +846,10 @@
 			label = "internal_rsense";
 			reg = <0>;
 			qcom,decimation = <0>;
+			qcom,pre-div-channel-scaling = <1>;
+			qcom,calibration-type = "absolute";
+			qcom,scale-function = <0>;
+			qcom,hw-settle-time = <0>;
 			qcom,fast-avg-setup = <0>;
 		};
 	};
@@ -1270,7 +1281,6 @@
 		label = "flash";
 		flash-boost-supply = <&pm8941_chg_boost>;
 		torch-boost-supply = <&pm8941_boost>;
-		flash-wa-supply = <&pm8941_chg_chgr>;
 	};
 
 	qcom,leds@d400 {

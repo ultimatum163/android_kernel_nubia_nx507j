@@ -456,7 +456,7 @@ static void submit_flushes(struct work_struct *ws)
 			atomic_inc(&rdev->nr_pending);
 			atomic_inc(&rdev->nr_pending);
 			rcu_read_unlock();
-			bi = bio_alloc_mddev(GFP_KERNEL, 0, mddev);
+			bi = bio_alloc_mddev(GFP_NOIO, 0, mddev);
 			bi->bi_end_io = md_end_flush;
 			bi->bi_private = rdev;
 			bi->bi_bdev = rdev->bdev;
@@ -5445,9 +5445,9 @@ static int get_bitmap_file(struct mddev * mddev, void __user * arg)
 	int err = -ENOMEM;
 
 	if (md_allow_write(mddev))
-		file = kmalloc(sizeof(*file), GFP_NOIO);
+		file = kzalloc(sizeof(*file), GFP_NOIO);
 	else
-		file = kmalloc(sizeof(*file), GFP_KERNEL);
+		file = kzalloc(sizeof(*file), GFP_KERNEL);
 
 	if (!file)
 		goto out;

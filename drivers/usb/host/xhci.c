@@ -157,7 +157,7 @@ int xhci_reset(struct xhci_hcd *xhci)
 {
 	u32 command;
 	u32 state;
-	int ret;
+	int ret, i;
 
 	state = xhci_readl(xhci, &xhci->op_regs->status);
 	if ((state & STS_HALT) == 0) {
@@ -180,7 +180,16 @@ int xhci_reset(struct xhci_hcd *xhci)
 	 * xHCI cannot write to any doorbells or operational registers other
 	 * than status until the "Controller Not Ready" flag is cleared.
 	 */
-	return handshake(xhci, &xhci->op_regs->status, STS_CNR, 0, 250 * 1000);
+	ret = handshake(xhci, &xhci->op_regs->status,
+			STS_CNR, 0, 10 * 1000 * 1000);
+
+	for (i = 0; i < 2; ++i) {
+		xhci->bus_state[i].port_c_suspend = 0;
+		xhci->bus_state[i].suspended_ports = 0;
+		xhci->bus_state[i].resuming_ports = 0;
+	}
+
+	return ret;
 }
 
 #ifdef CONFIG_PCI
@@ -326,7 +335,7 @@ static void xhci_cleanup_msix(struct xhci_hcd *xhci)
 	return;
 }
 
-static int xhci_try_enable_msi(struct usb_hcd *hcd)
+static inline int xhci_try_enable_msi(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	struct pci_dev  *pdev;
@@ -378,16 +387,12 @@ static int xhci_try_enable_msi(struct usb_hcd *hcd)
 
 #else
 
-static inline int xhci_try_enable_msi(struct usb_hcd *hcd)
+static int xhci_try_enable_msi(struct usb_hcd *hcd)
 {
 	return 0;
 }
 
 static inline void xhci_cleanup_msix(struct xhci_hcd *xhci)
-{
-}
-
-static inline void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
 {
 }
 
@@ -788,7 +793,7 @@ void xhci_shutdown(struct usb_hcd *hcd)
 #ifdef CONFIG_PM
 
 #ifdef CONFIG_PCI
-static void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
+static inline void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
 {
 	int i;
 
@@ -796,6 +801,10 @@ static void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
 		for (i = 0; i < xhci->msix_count; i++)
 			synchronize_irq(xhci->msix_entries[i].vector);
 	}
+}
+#else
+static inline void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
+{
 }
 #endif /* CONFIG_PCI */
 
@@ -1242,9 +1251,6 @@ static int xhci_check_args(struct usb_hcd *hcd, struct usb_device *udev,
 			return -EINVAL;
 		}
 	}
-
-	if (xhci->xhc_state & XHCI_STATE_HALTED)
-		return -ENODEV;
 
 	if (xhci->xhc_state & XHCI_STATE_HALTED)
 		return -ENODEV;
@@ -3430,7 +3436,7 @@ int xhci_discover_or_reset_device(struct usb_hcd *hcd, struct usb_device *udev)
 	/* Wait for the Reset Device command to finish */
 	timeleft = wait_for_completion_interruptible_timeout(
 			reset_device_cmd->completion,
-			USB_CTRL_SET_TIMEOUT);
+			XHCI_CMD_DEFAULT_TIMEOUT);
 	if (timeleft <= 0) {
 		xhci_warn(xhci, "%s while waiting for reset device command\n",
 				timeleft == 0 ? "Timeout" : "Signal");

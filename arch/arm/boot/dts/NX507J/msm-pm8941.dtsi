@@ -64,8 +64,7 @@
 			qcom,s2-type = <1>;
 			linux,code = <116>;
 		};
-
-		/* Removed the node, for PWK
+/* Removed by yfliu, for PWK
 		qcom,pon_2 {
 			qcom,pon-type = <1>;
 			qcom,support-reset = <1>;
@@ -204,9 +203,9 @@
 		qcom,vddmax-mv = <4350>; //ZTEMT_CHARGE  4200 --> 4350
 		qcom,vddsafe-mv = <4380>;  //ZTEMT_CHARGE  4230 --> 4380
 		qcom,vinmin-mv = <4400>;  //ZTEMT_CHARGE  4300 --> 4400
-		qcom,ibatmax-ma = <1200>;
+		qcom,ibatmax-ma = <1500>;
 		qcom,ibatterm-ma = <100>;
-		qcom,ibatsafe-ma = <1200>;
+		qcom,ibatsafe-ma = <1500>;
 		qcom,thermal-mitigation = <1500 700 600 325>;
 		qcom,cool-bat-decidegc = <0>; //ZTEMT_CHARGE 100 --> 0
 		qcom,cool-bat-mv = <4100>;
@@ -568,7 +567,7 @@
 		compatible = "qcom,qpnp-rtc";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		qcom,qpnp-rtc-write = <0>;
+		qcom,qpnp-rtc-write = <1>;
 		qcom,qpnp-rtc-alarm-pwrup = <1>;
 
 		qcom,pm8941_rtc_rw@6000 {
@@ -1248,7 +1247,6 @@
 		compatible = "qcom,qpnp-vibrator";
 		reg = <0xc000 0x100>;
 		label = "vibrator";
-		qcom,vib-vtg-level-mV = <3000>;
 		status = "ok";
 	};
 
@@ -1265,7 +1263,7 @@
 		reg = <0xd000 0x100>;
 		label = "rgb";
 	};
-
+	
 	qcom,leds@d100 {
 		compatible = "qcom,leds-qpnp";
 		reg = <0xd100 0x100>;

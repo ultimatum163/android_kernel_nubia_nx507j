@@ -1801,6 +1801,7 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 	xhci->event_ring = NULL;
 	xhci_dbg(xhci, "Freed event ring\n");
 
+	xhci->cmd_ring_reserved_trbs = 0;
 	if (xhci->cmd_ring)
 		xhci_ring_free(xhci, xhci->cmd_ring);
 	xhci->cmd_ring = NULL;
@@ -1872,6 +1873,7 @@ void xhci_mem_cleanup(struct xhci_hcd *xhci)
 no_bw:
 	xhci->num_usb2_ports = 0;
 	xhci->num_usb3_ports = 0;
+	xhci->num_active_eps = 0;
 	kfree(xhci->usb2_ports);
 	kfree(xhci->usb3_ports);
 	kfree(xhci->port_array);
